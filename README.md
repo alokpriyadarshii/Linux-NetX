@@ -318,6 +318,8 @@ bash scripts/generate_redis_certs.sh
 | API Testing | Postman |
 | CI/CD | GitHub Actions |
 
+---
+
 ## Prerequisites
 
 For Docker Compose deployment:
