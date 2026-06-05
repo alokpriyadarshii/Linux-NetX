@@ -1,0 +1,582 @@
+import pytest
+from pydantic import HttpUrl
+
+from linux_net.models import DriverConnectionArgs, DriverName
+from linux_net.models.common import WebHook
+from linux_net.models.driver import DriverExecutionResult
+from linux_net.models.request import ExecutionRequest, TemplateParseRequest, TemplateRenderRequest
+from linux_net.plugins.drivers import BaseDriver
+from linux_net.plugins.templates import BaseTemplateParser, BaseTemplateRenderer
+from linux_net.services import rpc
+
+
+class StubDriver(BaseDriver):
+    driver_name = "netmiko"
+
+    @classmethod
+    def from_execution_request(cls, req: ExecutionRequest) -> "StubDriver":
+        return cls(req=req)
+
+    @classmethod
+    def validate(cls, req: ExecutionRequest) -> None:
+        return None
+
+    def __init__(self, req: ExecutionRequest, **kwargs):
+        self.req = req
+        self.disconnect_calls: int = 0
+        self.sent_payload: list[str] | None = None
+
+    def connect(self) -> str:
+        return "session"
+
+    def send(self, session, command: list[str]) -> list[DriverExecutionResult]:
+        self.sent_payload = command
+        from linux_net.models.driver import DriverExecutionResult
+
+        return [
+            DriverExecutionResult(
+                command=cmd,
+                stdout=f"sent-{cmd}",
+                stderr="",
+                exit_status=0,
+                metadata={"duration_seconds": 0.001},
+            )
+            for cmd in command
+        ]
+
+    def config(self, session, config: list[str]) -> list[DriverExecutionResult]:
+        self.sent_payload = config
+        from linux_net.models.driver import DriverExecutionResult
+
+        return [
+            DriverExecutionResult(
+                command=cfg,
+                stdout=f"cfg-{cfg}",
+                stderr="",
+                exit_status=0,
+                metadata={"duration_seconds": 0.001},
+            )
+            for cfg in config
+        ]
+
+    def disconnect(self, session) -> None:
+        self.disconnect_calls += 1
+
+
+class StubRenderer(BaseTemplateRenderer):
+    template_name = "stub-renderer"
+
+    @classmethod
+    def from_rendering_request(cls, req: TemplateRenderRequest) -> "StubRenderer":
+        return cls()
+
+    def __init__(self):
+        self.called = False
+
+    def render(self, context: dict | None) -> str:
+        self.called = True
+        return "rendered-cmd"
+
+
+class StubParser(BaseTemplateParser):
+    template_name = "stub-parser"
+
+    @classmethod
+    def from_parsing_request(cls, req: TemplateParseRequest) -> "StubParser":
+        return cls()
+
+    def __init__(self):
+        self.called = False
+
+    def parse(self, context: str) -> dict:
+        self.called = True
+        return {"parsed": context}
+
+
+def test_rpc_execute_with_render_and_parse(monkeypatch, app_config):
+    """RPC execute should render, send via driver, parse output, and return parsed map."""
+    req = ExecutionRequest(
+        driver=DriverName.NETMIKO,
+        connection_args=DriverConnectionArgs(host="10.0.0.1"),
+        command={"cmd": "show version"},
+        rendering=TemplateRenderRequest(name="stub-renderer", template="t"),
+        parsing=TemplateParseRequest(name="stub-parser", template="t"),
+    )
+
+    monkeypatch.setattr(
+        rpc,
+        "drivers",
+        {DriverName.NETMIKO: StubDriver},
+    )
+    monkeypatch.setattr(rpc, "renderers", {"stub-renderer": StubRenderer})
+    monkeypatch.setattr(rpc, "parsers", {"stub-parser": StubParser})
+
+    result = rpc.execute(req)
+
+    assert result[0].command == "rendered-cmd"
+    assert result[0].stdout == "sent-rendered-cmd"
+    assert result[0].parsed == {"parsed": "sent-rendered-cmd"}
+
+
+def test_rpc_execute_missing_driver_raises(monkeypatch, app_config):
+    """RPC execute should raise when requested driver is unavailable."""
+    req = ExecutionRequest(
+        driver=DriverName.NETMIKO,
+        connection_args=DriverConnectionArgs(host="10.0.0.1"),
+        command="show version",
+    )
+
+    monkeypatch.setattr(rpc, "drivers", {})
+
+    with pytest.raises(NotImplementedError):
+        rpc.execute(req)
+
+
+def test_rpc_execute_config_path(monkeypatch, app_config):
+    """RPC execute should call driver.config when config is provided."""
+    captured: dict[str, str] = {}
+
+    class ConfigDriver(StubDriver):
+        @classmethod
+        def from_execution_request(cls, req: ExecutionRequest) -> "ConfigDriver":
+            return cls(req=req)
+
+        def config(self, session, config: list[str]) -> list[DriverExecutionResult]:
+            captured["config"] = ",".join(config)
+            cfg_key = "\n".join(config)
+            from linux_net.models.driver import DriverExecutionResult
+
+            return [
+                DriverExecutionResult(
+                    command=cfg_key, stdout=f"cfg-{cfg_key}", stderr="", exit_status=0
+                )
+            ]
+
+    req = ExecutionRequest(
+        driver=DriverName.NETMIKO,
+        connection_args=DriverConnectionArgs(host="10.0.0.1"),
+        config=["line1", "line2"],
+    )
+
+    monkeypatch.setattr(rpc, "drivers", {DriverName.NETMIKO: ConfigDriver})
+    result = rpc.execute(req)
+
+    assert captured["config"] == "line1,line2"
+    assert result[0].stdout == "cfg-line1\nline2"
+
+
+def test_rpc_execute_parsing_requires_dict(monkeypatch, app_config):
+    """Parsing step should fail when driver returns non-dict result."""
+
+    class BadDriver(StubDriver):
+        def send(self, session, command: list[str]) -> str:  # type: ignore[override]
+            return "not-a-dict"
+
+    req = ExecutionRequest(
+        driver=DriverName.NETMIKO,
+        connection_args=DriverConnectionArgs(host="10.0.0.1"),
+        command="show version",
+        parsing=TemplateParseRequest(name="stub-parser", template="t"),
+    )
+
+    monkeypatch.setattr(rpc, "drivers", {DriverName.NETMIKO: BadDriver})
+    monkeypatch.setattr(rpc, "parsers", {"stub-parser": StubParser})
+
+    with pytest.raises(ValueError):
+        rpc.execute(req)
+
+
+def test_rpc_execute_rendering_requires_dict(monkeypatch, app_config):
+    """Rendering step should fail when payload is not a dict."""
+
+    req = ExecutionRequest(
+        driver=DriverName.NETMIKO,
+        connection_args=DriverConnectionArgs(host="10.0.0.1"),
+        command={"cmd": "show version"},
+        rendering=TemplateRenderRequest(name="stub-renderer", template="t"),
+    )
+
+    monkeypatch.setattr(rpc, "drivers", {DriverName.NETMIKO: StubDriver})
+    monkeypatch.setattr(rpc, "renderers", {"stub-renderer": StubRenderer})
+
+    monkeypatch.setattr(StubRenderer, "render", classmethod(lambda cls, ctx: "rendered"))
+
+    result = rpc.execute(req)
+    assert result[0].command == "rendered"
+    assert result[0].stdout == "sent-rendered"
+
+
+def test_rpc_disconnect_called_on_exception(monkeypatch, app_config):
+    """Driver.disconnect should be called even when send/config raises."""
+    disconnect_calls: list[int] = []
+
+    class FailingDriver(StubDriver):
+        def send(self, session, command: list[str]):
+            raise RuntimeError("boom")
+
+        def disconnect(self, session) -> None:
+            disconnect_calls.append(1)
+
+    req = ExecutionRequest(
+        driver=DriverName.NETMIKO,
+        connection_args=DriverConnectionArgs(host="10.0.0.1"),
+        command="show version",
+    )
+
+    monkeypatch.setattr(rpc, "drivers", {DriverName.NETMIKO: FailingDriver})
+
+    result = rpc.execute(req)
+    assert result[0].exit_status == 1
+    assert "boom" in result[0].stderr
+    assert disconnect_calls, "disconnect should be invoked on exception"
+
+
+def _req_with_webhook(detach: bool = False) -> ExecutionRequest:
+    return ExecutionRequest(
+        driver=DriverName.NETMIKO if not detach else DriverName.PARAMIKO,
+        connection_args=DriverConnectionArgs(host="10.0.0.1"),
+        command="show version" if not detach else "sleep 60",
+        detach=detach,
+        webhook=WebHook(name="basic", url=HttpUrl("http://example.com/hook")),
+    )
+
+
+def test_rpc_exception_callback_skips_invalid_meta():
+    """rpc_exception_callback should return None when job.meta fails validation."""
+
+    class DummyJob:
+        def __init__(self):
+            self.meta = "not-a-dict"
+            self.save_calls = 0
+
+        def save_meta(self):
+            self.save_calls += 1
+
+    job = DummyJob()
+    result = rpc.rpc_exception_callback(job, None, ValueError, ValueError("boom"), None)  # type: ignore
+
+    assert result is None
+    assert job.save_calls == 0
+    assert job.meta == "not-a-dict"
+
+
+def test_rpc_webhook_callback_success_invokes_webhook(monkeypatch):
+    """rpc_webhook_callback should dispatch result to webhook on success."""
+    req = _req_with_webhook()
+    calls: list[tuple[ExecutionRequest, str, object]] = []
+
+    class DummyJob:
+        def __init__(self):
+            self.kwargs = {"req": req}
+            self.id = "job-123"
+            self.meta = {}
+
+    class DummyWebhook:
+        webhook_name = "basic"
+
+        def __init__(self, hook):
+            self.hook = hook
+
+        def call(self, req, job, result, **kwargs):
+            calls.append((req, job.id, result))
+
+    monkeypatch.setattr(rpc, "webhooks", {"basic": DummyWebhook})
+
+    job = DummyJob()
+    rpc.rpc_webhook_callback(job, None, {"ok": True})
+
+    assert calls == [(req, "job-123", {"ok": True})]
+
+
+def test_rpc_webhook_callback_failure_uses_unknown_error(monkeypatch):
+    """Failure path should fall back to 'Unknown Error' when meta validation fails."""
+    req = _req_with_webhook()
+    results: list[object] = []
+
+    class DummyJob:
+        def __init__(self):
+            self.kwargs = {"req": req}
+            self.id = "job-err"
+            self.meta = "bad-meta"
+
+        def save_meta(self):
+            return None
+
+    class DummyWebhook:
+        webhook_name = "basic"
+
+        def __init__(self, hook):
+            pass
+
+        def call(self, req, job, result, **kwargs):
+            results.append(result)
+
+    monkeypatch.setattr(rpc, "webhooks", {"basic": DummyWebhook})
+
+    job = DummyJob()
+    rpc.rpc_webhook_callback(job, None, ValueError, ValueError("boom"), None)
+
+    assert results == ["Unknown Error"]
+
+
+def test_rpc_webhook_callback_swallows_webhook_errors(monkeypatch):
+    """Webhook errors should be logged but not block downstream processing (registry sync)."""
+    req = _req_with_webhook()
+
+    class DummyJob:
+        def __init__(self):
+            self.kwargs = {"req": req}
+            self.id = "job-raise"
+            self.meta = {}
+
+    class FailingWebhook:
+        webhook_name = "basic"
+
+        def __init__(self, hook):
+            pass
+
+        def call(self, req, job, result, **kwargs):
+            raise RuntimeError("webhook failed")
+
+    monkeypatch.setattr(rpc, "webhooks", {"basic": FailingWebhook})
+
+    job = DummyJob()
+    # Should NOT raise — webhook failure must be swallowed so registry sync still runs
+    rpc.rpc_webhook_callback(job, None, {"ok": True})
+
+
+def test_webhook_retry_scheduled_on_failure(monkeypatch):
+    """On webhook call failure, a retry job should be enqueued in the FIFO queue."""
+    from datetime import timedelta
+    from unittest.mock import patch
+
+    import fakeredis
+    from pydantic import HttpUrl
+
+    from linux_net.models.common import WebHook
+    from linux_net.services.rpc import _dispatch_webhook_with_retry, dispatch_webhook
+
+    hook = WebHook(
+        url=HttpUrl("http://example.com/hook"),
+        max_retries=3,
+        retry_intervals=[5, 30, 120],
+    )
+    enqueued: list[dict] = []
+
+    class FailingCaller:
+        def __init__(self, h):
+            self.config = h
+
+        def call(self, req, job, result, **kwargs):
+            raise ConnectionError("target unreachable")
+
+        def build_payload(self, req, job, result, is_success, **kwargs):
+            return {"id": job.id, "status": "failed"}
+
+    class DummyJob:
+        def __init__(self):
+            self.id = "job-retry"
+            self.kwargs = {}
+            self.meta = {}
+            self.connection = fakeredis.FakeRedis()
+
+    class FakeQueue:
+        def __init__(self, name, connection):
+            pass
+
+        def enqueue_in(self, delay, func, kwargs=None):
+            enqueued.append({"delay": delay, "func": func, "kwargs": kwargs or {}})
+
+    class FakeReq:
+        webhook = hook
+        detach = False
+
+    wobj = FailingCaller(hook)
+    req = FakeReq()
+    job = DummyJob()
+
+    with patch("linux_net.services.rpc.Queue", FakeQueue):
+        _dispatch_webhook_with_retry(wobj, req, job, {"ok": True}, True, job)
+
+    assert len(enqueued) == 1
+    assert enqueued[0]["delay"] == timedelta(seconds=5)
+    assert enqueued[0]["func"] is dispatch_webhook
+    assert enqueued[0]["kwargs"]["attempt"] == 1
+
+
+def test_webhook_no_retry_when_max_retries_zero(monkeypatch):
+    """No retry should be scheduled when max_retries=0."""
+    from unittest.mock import patch
+
+    from pydantic import HttpUrl
+
+    from linux_net.models.common import WebHook
+    from linux_net.services.rpc import _dispatch_webhook_with_retry
+
+    hook = WebHook(url=HttpUrl("http://example.com/hook"), max_retries=0)
+    enqueued: list = []
+
+    class FailingCaller:
+        def __init__(self, h):
+            pass
+
+        def call(self, req, job, result, **kwargs):
+            raise ConnectionError("down")
+
+        def build_payload(self, req, job, result, is_success):
+            return {}
+
+    class DummyJob:
+        id = "j"
+        connection = None
+
+    class FakeReq:
+        webhook = hook
+        detach = False
+
+    class FakeQueue:
+        def __init__(self, *a, **kw):
+            pass
+
+        def enqueue_in(self, *a, **kw):
+            enqueued.append(1)
+
+    wobj = FailingCaller(hook)
+    with patch("linux_net.services.rpc.Queue", FakeQueue):
+        _dispatch_webhook_with_retry(wobj, FakeReq(), DummyJob(), {}, True, DummyJob())
+
+    assert len(enqueued) == 0
+
+
+def test_dispatch_webhook_retry_chain(monkeypatch):
+    """dispatch_webhook should re-enqueue with incremented attempt on HTTP failure."""
+    from datetime import timedelta
+    from unittest.mock import MagicMock, patch
+
+    import fakeredis
+
+    from linux_net.services.rpc import dispatch_webhook
+
+    enqueued: list[dict] = []
+
+    class FakeQueue:
+        def __init__(self, name, connection):
+            pass
+
+        def enqueue_in(self, delay, func, kwargs=None):
+            enqueued.append({"delay": delay, "attempt": (kwargs or {}).get("attempt")})
+
+    fake_job = MagicMock()
+    fake_job.connection = fakeredis.FakeRedis()
+
+    with (
+        patch("linux_net.services.rpc.requests.request", side_effect=ConnectionError("timeout")),
+        patch("linux_net.services.rpc.get_current_job", return_value=fake_job),
+        patch("linux_net.services.rpc.Queue", FakeQueue),
+    ):
+        dispatch_webhook(
+            webhook_data={
+                "name": "basic",
+                "url": "http://example.com/hook",
+                "max_retries": 3,
+                "retry_intervals": [10, 30, 120],
+            },
+            payload={"id": "j1", "status": "success"},
+            attempt=0,
+        )
+
+    assert len(enqueued) == 1
+    assert enqueued[0]["delay"] == timedelta(seconds=10)
+    assert enqueued[0]["attempt"] == 1
+
+
+def test_dispatch_webhook_permanent_failure_no_retry(monkeypatch):
+    """dispatch_webhook should not enqueue after exhausting all retries."""
+    from unittest.mock import MagicMock, patch
+
+    from linux_net.services.rpc import dispatch_webhook
+
+    enqueued: list = []
+
+    class FakeQueue:
+        def __init__(self, *a, **kw):
+            pass
+
+        def enqueue_in(self, *a, **kw):
+            enqueued.append(1)
+
+    fake_job = MagicMock()
+
+    with (
+        patch("linux_net.services.rpc.requests.request", side_effect=ConnectionError("timeout")),
+        patch("linux_net.services.rpc.get_current_job", return_value=fake_job),
+        patch("linux_net.services.rpc.Queue", FakeQueue),
+    ):
+        dispatch_webhook(
+            webhook_data={
+                "name": "basic",
+                "url": "http://example.com/hook",
+                "max_retries": 2,
+                "retry_intervals": [10, 30],
+            },
+            payload={"id": "j1"},
+            attempt=2,  # Already at max_retries — no more retries
+        )
+
+    assert len(enqueued) == 0
+
+
+def test_rpc_webhook_callback_registry_sync_after_webhook_failure(monkeypatch):
+    """Registry sync must execute even when webhook call raises."""
+    import fakeredis
+
+    req = _req_with_webhook(detach=True)
+
+    class DummyJob:
+        def __init__(self):
+            self.kwargs = {"req": req}
+            self.id = "job-detach"
+            self.meta = {"task_id": "task-abc"}
+
+    class FailingWebhook:
+        webhook_name = "basic"
+
+        def __init__(self, hook):
+            pass
+
+        def call(self, req, job, result, **kwargs):
+            raise RuntimeError("target down")
+
+    # Fake registry backed by fakeredis
+    fake_redis = fakeredis.FakeRedis()
+    from linux_net.services.rediz import DetachedTaskRegistry
+
+    registry = DetachedTaskRegistry.__new__(DetachedTaskRegistry)
+    registry.rdb = fake_redis
+    registry.register("task-abc", {"task_id": "task-abc", "last_offset": 0, "status": "running"})
+
+    monkeypatch.setattr(rpc, "webhooks", {"basic": FailingWebhook})
+    # The registry sync uses a local import inside rpc_webhook_callback, patch at the source
+    import linux_net.services.rediz as rediz_mod
+
+    monkeypatch.setattr(rediz_mod, "g_detached_task_registry", registry)
+
+    result = [
+        DriverExecutionResult(
+            command="query",
+            stdout="log output",
+            stderr="",
+            exit_status=0,
+            metadata={"task_id": "task-abc", "next_offset": 42, "completed": False},
+        )
+    ]
+
+    job = DummyJob()
+    # Must not raise even though webhook fails
+    rpc.rpc_webhook_callback(job, None, result)
+
+    # Registry must be updated despite webhook failure
+    meta = registry.get("task-abc")
+    assert meta is not None
+    assert meta["last_offset"] == 42
+    assert meta["status"] == "running"

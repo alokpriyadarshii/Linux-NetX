@@ -1,0 +1,654 @@
+"""
+Manager enqueues these functions into RQ,
+then they are executed by Workers.
+"""
+
+import logging
+import os
+import time
+import uuid
+from datetime import timedelta
+from typing import Callable, Optional
+
+import requests
+from pydantic import ValidationError
+from rq import Queue, get_current_job
+from rq.job import Callback, Job
+
+from ..models import JobAdditionalData, QueueStrategy
+from ..models.driver import DriverExecutionResult
+from ..models.request import ExecutionRequest
+from ..plugins import drivers, parsers, renderers, webhooks
+from ..services.rediz import g_detached_task_registry
+from ..utils import g_config
+from ..worker.node import start_pinned_worker
+
+log = logging.getLogger(__name__)
+
+
+def manage_detached_task(task_id: str, action: str, params: Optional[dict] = None):
+    """
+    Synchronous detached task management RPC.
+    Actions: query, kill
+    """
+    from .rediz import g_detached_task_registry
+
+    meta = g_detached_task_registry.get(task_id)
+    if not meta:
+        raise ValueError(f"Task {task_id} not found in registry")
+
+    # Skip if task already completed — avoids redundant queries from queued jobs
+    if action == "query" and meta.get("status") == "completed":
+        log.debug(f"Task {task_id} already completed, skipping query")
+        return []
+
+    # Reconstruct request to init driver
+    req = ExecutionRequest(
+        driver=meta["driver"],
+        connection_args=meta["connection_args"],
+        command="",  # Placeholder
+        queue_strategy=QueueStrategy.FIFO,  # management is usually FIFO
+    )
+
+    dobj = drivers[req.driver].from_execution_request(req)
+    session = None
+    try:
+        session = dobj.connect()
+        if action == "query":
+            offset = meta.get("last_offset", 0)
+            if params and "offset" in params and params["offset"] is not None:
+                offset = params["offset"]
+
+            import time
+
+            results = dobj._read_logs(session, task_id, offset)
+            if results and len(results) > 0:
+                res = results[0]
+                meta["last_offset"] = res.metadata.get("next_offset", offset)
+                meta["status"] = "running" if res.metadata.get("is_running") else "completed"
+            else:
+                # No results: process is gone or log file missing → mark completed
+                meta["status"] = "completed"
+
+            # Only update registry if task still exists (may have been cleared by user/API)
+            if g_detached_task_registry.get(task_id) is not None:
+                meta["last_sync"] = time.time()
+                g_detached_task_registry.register(task_id, meta)
+
+            return results
+        elif action == "kill":
+            return dobj.kill_task(session, task_id)
+        else:
+            raise ValueError(f"Unknown management action: {action}")
+    finally:
+        if session:
+            try:
+                dobj.disconnect(session)
+            except Exception:
+                pass
+
+
+def execute(req: ExecutionRequest):
+    """
+    Execute command on device.
+    """
+    if not drivers.get(req.driver):
+        raise NotImplementedError(f"Unknown 'driver' {req.driver}")
+
+    has_command = req.command is not None or req.file_transfer is not None
+    payload = req.config if req.config is not None else req.command
+
+    # Render before execution if specified
+    if req.rendering:
+        try:
+            if req.rendering.context is None:
+                req.rendering.context = {}
+
+            template_source = req.rendering.template
+
+            if isinstance(payload, dict):
+                # Merge payload into context (payload takes precedence)
+                req.rendering.context.update(payload)
+            elif template_source is None:
+                # If payload is str/list, and rendering.template is missing, use payload as template
+                if isinstance(payload, list):
+                    template_source = "\n".join(payload)
+                else:
+                    template_source = payload
+
+            if (
+                template_source is None
+                and not req.file_transfer
+                and not getattr(req.driver_args, "script_content", None)
+            ):
+                raise ValueError("Template source is required for rendering.")
+
+            if template_source is not None:
+                # Do the rendering
+                # Pass the template_source to the renderer if it was missing in req.rendering
+                render_req = req.rendering.model_copy(update={"template": template_source})
+                render = renderers[req.rendering.name].from_rendering_request(render_req)
+                payload = render.render(req.rendering.context)
+
+                # Persist rendered payload back to request so downstream validation sees a concrete
+                # command/config instead of the original dict + rendering metadata.
+                if has_command:
+                    req.command = payload
+                else:
+                    req.config = payload
+
+            if req.driver_args:
+                script_content = getattr(req.driver_args, "script_content", None)
+                if isinstance(script_content, str) and script_content:
+                    script_render_req = req.rendering.model_copy(
+                        update={"template": script_content}
+                    )
+                    script_render = renderers[req.rendering.name].from_rendering_request(
+                        script_render_req
+                    )
+                    req.driver_args.script_content = script_render.render(req.rendering.context)
+
+            if req.file_transfer:
+                if isinstance(req.file_transfer.remote_path, str):
+                    t_req = req.rendering.model_copy(
+                        update={"template": req.file_transfer.remote_path}
+                    )
+                    t_render = renderers[req.rendering.name].from_rendering_request(t_req)
+                    req.file_transfer.remote_path = t_render.render(req.rendering.context)
+                if isinstance(req.file_transfer.local_path, str):
+                    t_req = req.rendering.model_copy(
+                        update={"template": req.file_transfer.local_path}
+                    )
+                    t_render = renderers[req.rendering.name].from_rendering_request(t_req)
+                    req.file_transfer.local_path = t_render.render(req.rendering.context)
+
+            # After payload is rendered, payload should be a str or list[str]
+            # Besides, we need to delete the rendering field
+            req.rendering = None
+        except Exception as e:
+            log.error(f"Error in rendering: {e}")
+            raise
+    if payload is None:
+        payload = []
+    elif isinstance(payload, str):
+        payload = [payload]
+    assert isinstance(payload, list), "Config/command must be str/list[str] after rendering."
+
+    # Keep the request payload in sync after normalization
+    if has_command:
+        req.command = payload
+    else:
+        req.config = payload
+
+    # Pass Job ID to request for driver use
+    job = get_current_job()
+    if job:
+        # Pydantic models with extra="allow" allow setting new attributes
+        req.id = job.id
+    else:
+        req.id = str(uuid.uuid4())
+
+    # Init the driver
+    try:
+        dobj = drivers[req.driver].from_execution_request(req)
+    except Exception as e:
+        log.error(f"Error in initializing driver: {e}")
+        raise
+
+    # Depend command or config, do config or send.
+    session = None
+    try:
+        session = dobj.connect()
+
+        # Detached lifecycle
+        if req.detach and not req.config:
+            # Check if task_id is pre-allocated in job meta
+            job = get_current_job()
+            task_id = job.meta.get("task_id") if job else None
+
+            if not task_id:
+                task_id = str(uuid.uuid4())[:12]
+
+            log.info(f"Launching detached task {task_id} on {req.connection_args.host}")
+
+            # Driver launches the process independently
+            # If command list is empty, pass empty string;
+            # driver may check args (script_content, etc.)
+            primary_cmd = payload[0] if (payload and isinstance(payload, list)) else ""
+            result = dobj.launch_detached(session, primary_cmd, task_id)
+
+            # result is list[DriverExecutionResult], find 'launch' entry
+            is_running = True
+            for res in result:
+                if res.command == "launch":
+                    is_running = res.metadata.get("is_running", True)
+                    break
+
+            # Register in Redis for global tracking
+            meta = {
+                "task_id": task_id,
+                "command": req.command,
+                "host": req.connection_args.host,
+                "driver": req.driver,
+                "worker_id": None,  # Will be updated if push_interval is set
+                "push_interval": req.push_interval,
+                "webhook": req.webhook.model_dump(mode="json") if req.webhook else None,
+                "connection_args": req.connection_args.model_dump(mode="json"),
+                "last_sync": time.time(),
+                "created_at": time.time(),
+                "status": "running" if is_running else "completed",
+            }
+            g_detached_task_registry.register(task_id, meta, job_id=job.id if job else None)
+            return result
+
+        if has_command:
+            # send handles both commands and file_transfers
+            result = dobj.send(session, payload)
+        else:
+            result = dobj.config(session, payload)
+    except Exception as e:
+        log.error(f"Error in connection or execution: {e}")
+        return [
+            DriverExecutionResult(
+                command="\n".join(payload) if isinstance(payload, list) else str(payload),
+                stdout="",
+                stderr=str(e),
+                exit_status=1,
+                metadata={"duration_seconds": 0.0},
+            )
+        ]
+    finally:
+        if session:
+            try:
+                dobj.disconnect(session)
+            except Exception:
+                pass
+
+    if req.parsing:
+        try:
+            if not isinstance(result, list):
+                raise ValueError("Result must be a list for parsing.")
+
+            if req.parsing.context:
+                req.parsing.context = None
+                log.warning("Context in request is overridden by stdout.")
+
+            parser = parsers[req.parsing.name].from_parsing_request(req.parsing)
+            for val in result:
+                # If it's a rich object (stdout, stderr, etc.), parse only the stdout
+                if hasattr(val, "stdout"):
+                    val.parsed = parser.parse(val.stdout)
+                elif isinstance(val, dict) and "stdout" in val:
+                    val["parsed"] = parser.parse(val["stdout"])
+        except Exception as e:
+            log.error(f"Error in parsing: {e}")
+            raise
+
+    return result
+
+
+def spawn(q_name: str, host: str):
+    """
+    Start a worker that is pinned to a specific queue.
+    """
+    start_pinned_worker(q_name=q_name, host=host)
+
+
+def rpc_cleanup_handler(job: Job):
+    """
+    Cleanup staged files associated with the job.
+    """
+    req = job.kwargs.get("req")
+    if not req:
+        return
+
+    # staged_file_id could be in model or dict
+    staged_file_id = getattr(req, "staged_file_id", None)
+    if not staged_file_id and isinstance(req, dict):
+        staged_file_id = req.get("staged_file_id")
+
+    if staged_file_id and os.path.exists(staged_file_id):
+        try:
+            os.remove(staged_file_id)
+            log.info(f"Success/Failure: Cleaned up staged file: {staged_file_id}")
+        except Exception as e:
+            log.warning(f"Failed to cleanup staged file {staged_file_id}: {e}")
+
+
+def rpc_callback_factory(func: Optional[Callable], timeout: Optional[float] = None):
+    """
+    NOTE: `rq` wraps callable into Callback object.
+    When serialized, the function is lost, only the name is stored.
+    The function is **solely** looked up by **name** in Worker.
+
+    Besides, `rq` does not support passing arguments to the Callback.
+    And it does not support chaining Callbacks. This limits the flexibility.
+    """
+    return (
+        Callback(
+            func=func,
+            timeout=timeout,
+        )
+        if func
+        else None
+    )
+
+
+def dispatch_webhook(webhook_data: dict, payload: dict, attempt: int = 0):
+    """
+    Deliver a pre-built webhook payload. On failure, re-enqueues itself with exponential
+    backoff using the FIFO queue. This is the retry-safe delivery function for webhooks.
+    """
+    from ..models.common import WebHook
+
+    webhook = WebHook.model_validate(webhook_data)
+    try:
+        resp = requests.request(
+            method=webhook.method.value,
+            url=webhook.url.unicode_string(),
+            headers=webhook.headers,
+            cookies=webhook.cookies,
+            timeout=webhook.timeout,
+            auth=webhook.auth,
+            json=payload,
+        )
+        resp.raise_for_status()
+        log.info(
+            f"Webhook delivered to {webhook.url} (attempt {attempt + 1}/{webhook.max_retries + 1})"
+        )
+    except Exception as e:
+        next_attempt = attempt + 1
+        if next_attempt <= webhook.max_retries:
+            intervals = webhook.retry_intervals
+            delay = intervals[attempt] if attempt < len(intervals) else intervals[-1]
+            job = get_current_job()
+            conn = job.connection if job else None
+            if conn:
+                q = Queue(g_config.get_fifo_queue_name(), connection=conn)
+                q.enqueue_in(
+                    timedelta(seconds=delay),
+                    dispatch_webhook,
+                    kwargs={
+                        "webhook_data": webhook_data,
+                        "payload": payload,
+                        "attempt": next_attempt,
+                    },
+                )
+                log.warning(
+                    f"Webhook delivery failed for {webhook.url} "
+                    f"(attempt {next_attempt}/{webhook.max_retries + 1}), "
+                    f"retrying in {delay}s: {e}"
+                )
+            else:
+                log.error(
+                    f"Webhook delivery failed for {webhook.url} "
+                    f"(attempt {next_attempt}/{webhook.max_retries + 1}), "
+                    f"no RQ connection available for retry: {e}"
+                )
+        else:
+            log.error(
+                f"Webhook permanently failed after {webhook.max_retries + 1} attempt(s) "
+                f"for {webhook.url}: {e}"
+            )
+
+
+def _dispatch_webhook_with_retry(wobj, req, job_obj, result, is_success, rq_job, event_type=None):
+    """
+    Attempt webhook delivery via the plugin. On failure, enqueue a retry via dispatch_webhook.
+    """
+    try:
+        wobj.call(req=req, job=job_obj, result=result, is_success=is_success, event_type=event_type)
+    except Exception as e:
+        webhook = req.webhook
+        if not webhook or webhook.max_retries == 0:
+            log.warning(f"Webhook delivery failed (no retry configured): {e}")
+            return
+
+        # Build the payload independently so dispatch_webhook can re-deliver without req/job
+        try:
+            payload = wobj.build_payload(req, job_obj, result, is_success, event_type=event_type)
+        except Exception as build_err:
+            log.warning(f"Could not build webhook payload for retry: {build_err}")
+            return
+
+        webhook_data = webhook.model_dump(mode="json")
+        intervals = webhook.retry_intervals
+        delay = intervals[0] if intervals else 10
+
+        conn = rq_job.connection if rq_job else None
+        if conn:
+            q = Queue(g_config.get_fifo_queue_name(), connection=conn)
+            q.enqueue_in(
+                timedelta(seconds=delay),
+                dispatch_webhook,
+                kwargs={
+                    "webhook_data": webhook_data,
+                    "payload": payload,
+                    "attempt": 1,
+                },
+            )
+            log.warning(
+                f"Webhook delivery failed for {webhook.url}, "
+                f"retry 1/{webhook.max_retries} scheduled in {delay}s: {e}"
+            )
+        else:
+            log.error(f"Webhook delivery failed for {webhook.url}, no RQ connection for retry: {e}")
+
+
+def rpc_webhook_callback(*args):
+    """
+    If job has a webhook, this function is called when job succeeded / failed.
+
+    This is called in two cases:
+    - failed: args = (job, conn, exc_type, exc_value, tb)
+    - succeeded: args = (job, conn, return_value)
+    """
+    job = args[0]
+    rpc_cleanup_handler(job)
+
+    if len(args) == 3:
+        # succeeded
+        job, _, ret = args
+        result = ret
+        is_success = True
+    elif len(args) == 5:
+        # failed, will call rpc_exception_handler at first
+        job = args[0]
+        result = rpc_exception_callback(*args)
+        result = result.error if result else "Unknown Error"
+        is_success = False
+    else:
+        # Should never happen
+        log.warning("Webhook handler is called with unexpected args.")
+        return
+
+    # Audit log (moved from Manager for RQ compatibility)
+    if g_config.mongodb.enabled:
+        from .audit import rpc_audit_callback
+        try:
+            rpc_audit_callback(*args)
+        except Exception as e:
+            log.warning(f"Error in audit callback: {e}")
+
+    req: ExecutionRequest = job.kwargs.get("req", None)
+    if req is None:
+        if job.meta and "req_payload" in job.meta:
+            req = ExecutionRequest(**job.meta["req_payload"])
+        else:
+            log.warning("Webhook handler is called without `req` in job.kwargs or job.meta.")
+            return
+
+    if req.webhook is not None:
+        try:
+            meta = job.meta if job.meta else {}
+
+            # For detached tasks, only the supervisor triggers webhooks.
+            # The launch job completing just means the background process was spawned,
+            # NOT that the task finished — so we skip the webhook here.
+            # Supervisor-triggered jobs carry "webhook_event_type" in meta.
+            if req.detach and "webhook_event_type" not in meta:
+                log.debug(f"Skipping webhook for detach launch job {job.id}")
+            else:
+                from ..models.response import JobInResponse
+
+                wobj = webhooks[req.webhook.name](req.webhook)
+
+                # Build JobInResponse for all jobs (structured result + timestamps)
+                try:
+                    job_resp = JobInResponse.from_job(job)
+                except Exception:
+                    job_resp = job  # fallback to raw job if conversion fails
+
+                # Fix status: RQ on_success callback may fire before status transitions
+                if hasattr(job_resp, "status"):
+                    job_resp.status = "finished" if is_success else "failed"
+
+                if req.detach:
+                    task_id = meta.get("task_id")
+                    job_resp.id = task_id or job.id
+
+                    # Skip webhook if task was cleared or is a redundant query
+                    # for an already-completed task.
+                    from .rediz import g_detached_task_registry
+                    task_meta = g_detached_task_registry.get(task_id) if task_id else None
+                    if task_meta is None:
+                        # Task cleared from registry — skip
+                        log.debug(f"Skipping webhook for cleared task {task_id}")
+                        return
+                    if (
+                        task_meta.get("status") == "completed"
+                        and (not result or (isinstance(result, list) and len(result) == 0))
+                    ):
+                        # Task already completed AND this job returned empty
+                        # (redundant query) — skip
+                        log.debug(f"Skipping redundant webhook for completed task {task_id}")
+                        return
+
+                    # Determine event_type from supervisor hint
+                    event_type = meta.get("webhook_event_type", "detached.log_push")
+
+                    # If task actually completed, upgrade to detached.completed
+                    is_log_push = event_type == "detached.log_push"
+                    if is_log_push and is_success and isinstance(result, list):
+                        for res in result:
+                            completed = False
+                            if hasattr(res, "metadata"):
+                                completed = not res.metadata.get("is_running", True)
+                            elif isinstance(res, dict):
+                                completed = not res.get("metadata", {}).get("is_running", True)
+                            if completed:
+                                event_type = "detached.completed"
+                                break
+                else:
+                    event_type = "job.completed" if is_success else "job.failed"
+
+                _dispatch_webhook_with_retry(
+                    wobj, req, job_resp, result, is_success, job, event_type=event_type
+                )
+        except Exception as e:
+            log.warning(f"Error in webhook execution: {e}")
+
+    # --- New: Transform Local Paths to Download URLs ---
+    if is_success and isinstance(result, list):
+
+        staging_dir = str(g_config.storage.staging)
+        download_base = os.path.join(staging_dir, "downloads")
+
+        for res in result:
+            if hasattr(res, "metadata") and isinstance(res.metadata, dict):
+                # Check for either flattened or nested local_path
+                metadata = res.metadata
+                local_path = metadata.get("local_path")
+
+                if local_path and local_path.startswith(download_base):
+                    # It's a staged download, generate a URL
+                    file_id = os.path.relpath(local_path, download_base)
+
+                    # Determine Base URL for external access
+                    if g_config.server.external_url:
+                        base_url = g_config.server.external_url.rstrip("/")
+                    else:
+                        host = g_config.server.host
+                        # If listening on all interfaces, fallback to a more sensible default
+                        # for the URL, though external_url is preferred.
+                        if host == "0.0.0.0":
+                            import socket
+
+                            try:
+                                host = socket.gethostname()
+                            except Exception:
+                                host = "localhost"
+                        base_url = f"http://{host}:{g_config.server.port}"
+
+                    download_url = f"{base_url}/storage/fetch/{file_id}"
+
+                    # Assign to the formal field in DriverExecutionResult
+                    res.download_url = download_url
+
+                    log.info(f"Generated download URL for job {job.id}: {download_url}")
+
+    # --- New Detach Registry Sync ---
+    # If this was a detached task query/execution, update the registry with next_offset
+    if req.detach:
+        try:
+            from .rediz import g_detached_task_registry
+
+            # result is a list of DriverExecutionResult
+            # For management query, it has only one key
+            for val in result:
+                if hasattr(val, "metadata") and "task_id" in val.metadata:
+                    task_id = val.metadata["task_id"]
+                    next_offset = val.metadata.get("next_offset")
+                    completed = val.metadata.get("completed", False)
+
+                    meta = g_detached_task_registry.get(task_id)
+                    if meta:
+                        if next_offset is not None:
+                            meta["last_offset"] = next_offset
+                        meta["last_sync"] = time.time()
+
+                        if completed:
+                            meta["status"] = "completed"
+                        else:
+                            meta["status"] = "running"
+
+                        g_detached_task_registry.register(task_id, meta, job_id=job.id)
+                    break
+        except Exception as e:
+            # Don't re-raise: registry sync is secondary to job execution.
+            # Re-raising here would mark an already-successful job as FAILED.
+            log.warning(f"Error in updating detach registry: {e}")
+
+
+def rpc_exception_callback(
+    job: Job, conn, exc_type: type[BaseException], exc_value: BaseException, tb
+) -> JobAdditionalData | None:
+    """
+    Handle exceptions that occur during RPC job execution.
+
+    NOTE: If custom handler (e.g. webhook) is needed, it should
+    call this handler first (See `rpc_callback_factory` ).
+    """
+    # rq.job.Result only record exc_string, which is undesirable.
+    # We use job.meta to store exc_value.
+    meta = None
+    try:
+        meta = JobAdditionalData.model_validate(job.meta)
+    except ValidationError as e:
+        log.error(f"Error in validating job metadata: {e}, skipping exception.")
+        return None
+
+    meta.error = (exc_type.__name__, str(exc_value))
+
+    job.meta = meta.model_dump()
+    job.save_meta()
+
+    # Audit log (moved from Manager for RQ compatibility)
+    if g_config.mongodb.enabled:
+        from .audit import rpc_audit_callback
+        try:
+            rpc_audit_callback(job, conn, exc_type, exc_value, tb)
+        except Exception as e:
+            log.warning(f"Error in audit callback (failure): {e}")
+
+    return meta

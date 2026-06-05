@@ -1,0 +1,227 @@
+import logging
+import os
+from typing import Optional
+
+from redis import Redis
+from redis.sentinel import Sentinel
+
+from ..utils import g_config
+from ..utils.config import RedisConfig
+
+log = logging.getLogger(__name__)
+
+
+def _fake_redis_enabled() -> bool:
+    """
+    Treat LINUX_NET_FAKE_REDIS as a boolean flag; values like "1/true/yes/on"
+    enable fakeredis, anything else is considered disabled.
+    """
+    value = os.getenv("LINUX_NET_FAKE_REDIS", "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+class Rediz:
+    def __init__(self, config: RedisConfig):
+        self.config = config
+
+        # Use fakeredis for tests when requested
+        if _fake_redis_enabled():
+            try:
+                import fakeredis
+            except ImportError as e:
+                raise ImportError(
+                    "LINUX_NET_FAKE_REDIS is set but fakeredis is not installed. "
+                    "Install fakeredis or unset LINUX_NET_FAKE_REDIS."
+                ) from e
+
+            log.info("[USING FAKEREDIS MODE]")
+            self.conn = fakeredis.FakeRedis()
+            return
+
+        # Using Sentinel for connection
+        if config.sentinel.enabled:
+            log.info("[USING REDIS SENTINEL MODE]")
+            log.info(f"Sentinel server: {config.sentinel.host}:{config.sentinel.port}")
+            log.info(f"Sentinel Master name: '{config.sentinel.master_name}'")
+            log.info(f"TLS encryption: {'Enabled' if config.tls.enabled else 'Disabled'}")
+
+            sentinel = Sentinel(
+                [(config.sentinel.host, config.sentinel.port)],
+                socket_timeout=config.timeout,
+                password=config.sentinel.password,
+                sentinel_kwargs={
+                    "password": config.sentinel.password,
+                    "socket_timeout": config.timeout,
+                },
+            )
+
+            # Try to discover master node information from Sentinel
+            try:
+                master_info = sentinel.discover_master(config.sentinel.master_name)
+                log.info(f"Discovered Redis master node: {master_info[0]}:{master_info[1]}")
+            except Exception as e:
+                log.error(f"Unable to discover master node from Sentinel: {e!s}")
+
+            # Try to discover all slave nodes
+            try:
+                slave_nodes = sentinel.discover_slaves(config.sentinel.master_name)
+                log.info(f"Discovered {len(slave_nodes)} Redis slave nodes:")
+                for i, slave in enumerate(slave_nodes, 1):
+                    log.info(f"  Slave #{i}: {slave[0]}:{slave[1]}")
+            except Exception as e:
+                log.error(f"Unable to discover slave nodes from Sentinel: {e!s}")
+
+            # Connect to master node
+            if config.tls.enabled:
+                log.info("Connecting to Redis master node with TLS encryption")
+                master = sentinel.master_for(
+                    config.sentinel.master_name,
+                    socket_timeout=config.timeout,
+                    password=config.password,
+                    ssl=True,
+                    ssl_cert_reqs="required",
+                    ssl_ca_certs=config.tls.ca,
+                    ssl_certfile=config.tls.cert,
+                    ssl_keyfile=config.tls.key,
+                    socket_keepalive=config.keepalive,
+                    retry_on_timeout=True,
+                    retry_on_error=[ConnectionError],
+                )
+            else:
+                log.info("Connecting to Redis master node without encryption")
+                master = sentinel.master_for(
+                    config.sentinel.master_name,
+                    socket_timeout=config.timeout,
+                    password=config.password,
+                    socket_keepalive=config.keepalive,
+                    retry_on_timeout=True,
+                    retry_on_error=[ConnectionError],
+                )
+
+            self.conn = master
+
+            # Verify connection success
+            try:
+                ping_result = self.conn.ping()
+                log.info(
+                    f"Redis master node connection test: "
+                    f"{'Successful' if ping_result else 'Failed'}"
+                )
+            except Exception as e:
+                log.error(f"Redis master node connection failed: {e!s}")
+
+        # Using direct connection mode
+        else:
+            log.info("[USING DIRECT REDIS CONNECTION MODE]")
+            log.info(f"Redis server: {config.host}:{config.port}")
+            log.info(f"TLS encryption: {'Enabled' if config.tls.enabled else 'Disabled'}")
+            log.info(
+                f"Timeout setting: {config.timeout}s, "
+                f"Keep alive: {'Yes' if config.keepalive else 'No'}"
+            )
+
+            if config.tls.enabled:
+                log.info("Connecting to Redis with TLS encryption")
+                self.conn = Redis(
+                    host=config.host,
+                    port=config.port,
+                    password=config.password,
+                    ssl=True,
+                    ssl_cert_reqs="required",
+                    ssl_ca_certs=config.tls.ca,
+                    ssl_certfile=config.tls.cert,
+                    ssl_keyfile=config.tls.key,
+                    socket_connect_timeout=config.timeout,
+                    socket_keepalive=config.keepalive,
+                    retry_on_timeout=True,
+                    retry_on_error=[ConnectionError],
+                )
+            else:
+                log.info("Connecting to Redis without encryption")
+                self.conn = Redis(
+                    host=config.host,
+                    port=config.port,
+                    password=config.password,
+                    socket_connect_timeout=config.timeout,
+                    socket_keepalive=config.keepalive,
+                    retry_on_timeout=True,
+                    retry_on_error=[ConnectionError],
+                )
+
+            # Verify connection success
+            try:
+                ping_result = self.conn.ping()
+                log.info(f"Redis connection test: {'Successful' if ping_result else 'Failed'}")
+            except Exception as e:
+                log.error(f"Redis connection failed: {e!s}")
+
+
+class DetachedTaskRegistry:
+    """
+    Manages metadata for detached tasks in Redis.
+    Structure: Hash `linux_net:detached_task_registry` -> {task_id: JSON_encoded_metadata}
+    """
+
+    KEY = "linux_net:detached_task_registry"
+
+    def __init__(self, rediz: Rediz):
+        self.rdb = rediz.conn
+
+    def register(self, task_id: str, metadata: dict, job_id: Optional[str] = None):
+        """Register a new task with its metadata."""
+        import json
+
+        self.rdb.hset(self.KEY, task_id, json.dumps(metadata))
+        log.info(f"Detached Task {task_id} registered in Registry.")
+
+        # Audit hook: only fire on meaningful lifecycle transitions, not on every
+        # offset update (which occurs every push_interval second from the supervisor).
+        if g_config.mongodb.enabled and metadata.get("status") in ("launching", "completed"):
+            try:
+                from rq import Queue
+
+                from linux_net.worker.archiver import process_detached_audit
+
+                q = Queue("AuditLogQ", connection=self.rdb)
+                q.enqueue(
+                    process_detached_audit,
+                    task_id=task_id,
+                    metadata=metadata,
+                    job_id=job_id,
+                    timeout=60,
+                )
+            except Exception as e:
+                log.warning(f"Failed to enqueue detached audit for {task_id}: {e}")
+
+    def get(self, task_id: str) -> Optional[dict]:
+        """Retrieve task metadata by ID."""
+        import json
+
+        data = self.rdb.hget(self.KEY, task_id)
+        if not data:
+            return None
+        # Handle bytes or str
+        if isinstance(data, bytes):
+            data = data.decode("utf-8")
+        return json.loads(data)
+
+    def unregister(self, task_id: str):
+        """Remove a task from the registry."""
+        self.rdb.hdel(self.KEY, task_id)
+        log.info(f"Detached Task {task_id} removed from Registry.")
+
+    def list_all(self) -> dict:
+        """List all registered tasks using non-blocking scan."""
+        import json
+
+        result = {}
+        # Use hscan_iter to avoid blocking Redis with large registries
+        for k, v in self.rdb.hscan_iter(self.KEY):
+            key = k.decode("utf-8") if isinstance(k, bytes) else k
+            val = v.decode("utf-8") if isinstance(v, bytes) else v
+            result[key] = json.loads(val)
+        return result
+
+
+g_rdb = Rediz(g_config.redis)
+g_detached_task_registry = DetachedTaskRegistry(g_rdb)

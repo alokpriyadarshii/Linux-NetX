@@ -1,0 +1,217 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "linux-net.fullname" . }}-node-worker
+  labels:
+    {{- include "linux-net.labels" . | nindent 4 }}
+    component: node-worker
+spec:
+  replicas: {{ .Values.replicaCount.nodeWorker }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "linux-net.selectorLabels" . | nindent 6 }}
+      component: node-worker
+  template:
+    metadata:
+      labels:
+        {{- include "linux-net.selectorLabels" . | nindent 8 }}
+        component: node-worker
+    spec:
+      terminationGracePeriodSeconds: 120
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  {{- include "linux-net.selectorLabels" . | nindent 18 }}
+                  component: node-worker
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: node-worker
+        image: "{{ .Values.images.nodeWorker.repository }}:{{ .Values.images.nodeWorker.tag }}"
+        imagePullPolicy: {{ .Values.images.nodeWorker.pullPolicy }}
+        resources:
+          {{- toYaml .Values.resources.nodeWorker | nindent 10 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "linux-net.fullname" . }}-config
+        env:
+        - name: LINUX_NET_SERVER__API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: api-key
+        - name: LINUX_NET_REDIS__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: password
+        - name: LINUX_NET_REDIS__SENTINEL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: password
+        - name: LINUX_NET_VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: vault-token
+        volumeMounts:
+        - name: linux-net-storage
+          mountPath: /app/storage
+        {{- if eq .Values.config.redis.tls "true" }}
+        - name: redis-tls
+          mountPath: /app/redis/tls
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: linux-net-storage
+        persistentVolumeClaim:
+          claimName: {{ include "linux-net.fullname" . }}-storage
+      {{- if eq .Values.config.redis.tls "true" }}
+      - name: redis-tls
+        secret:
+          secretName: {{ include "linux-net.fullname" . }}-redis-tls
+      {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "linux-net.fullname" . }}-fifo-worker
+  labels:
+    {{- include "linux-net.labels" . | nindent 4 }}
+    component: fifo-worker
+spec:
+  replicas: {{ .Values.replicaCount.fifoWorker }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "linux-net.selectorLabels" . | nindent 6 }}
+      component: fifo-worker
+  template:
+    metadata:
+      labels:
+        {{- include "linux-net.selectorLabels" . | nindent 8 }}
+        component: fifo-worker
+    spec:
+      terminationGracePeriodSeconds: 60
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  {{- include "linux-net.selectorLabels" . | nindent 18 }}
+                  component: fifo-worker
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: fifo-worker
+        image: "{{ .Values.images.fifoWorker.repository }}:{{ .Values.images.fifoWorker.tag }}"
+        imagePullPolicy: {{ .Values.images.fifoWorker.pullPolicy }}
+        resources:
+          {{- toYaml .Values.resources.fifoWorker | nindent 10 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "linux-net.fullname" . }}-config
+        env:
+        - name: LINUX_NET_SERVER__API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: api-key
+        - name: LINUX_NET_REDIS__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: password
+        - name: LINUX_NET_REDIS__SENTINEL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: password
+        - name: LINUX_NET_VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: vault-token
+        volumeMounts:
+        - name: linux-net-storage
+          mountPath: /app/storage
+        {{- if eq .Values.config.redis.tls "true" }}
+        - name: redis-tls
+          mountPath: /app/redis/tls
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: linux-net-storage
+        persistentVolumeClaim:
+          claimName: {{ include "linux-net.fullname" . }}-storage
+      {{- if eq .Values.config.redis.tls "true" }}
+      - name: redis-tls
+        secret:
+          secretName: {{ include "linux-net.fullname" . }}-redis-tls
+      {{- end }}
+---
+{{- if eq .Values.config.mongodb.enabled "true" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "linux-net.fullname" . }}-archiver-worker
+  labels:
+    {{- include "linux-net.labels" . | nindent 4 }}
+    component: archiver-worker
+spec:
+  replicas: {{ .Values.replicaCount.archiverWorker }}
+  selector:
+    matchLabels:
+      {{- include "linux-net.selectorLabels" . | nindent 6 }}
+      component: archiver-worker
+  template:
+    metadata:
+      labels:
+        {{- include "linux-net.selectorLabels" . | nindent 8 }}
+        component: archiver-worker
+    spec:
+      containers:
+      - name: archiver-worker
+        image: "{{ .Values.images.archiverWorker.repository }}:{{ .Values.images.archiverWorker.tag }}"
+        imagePullPolicy: {{ .Values.images.archiverWorker.pullPolicy }}
+        resources:
+          {{- toYaml .Values.resources.archiverWorker | nindent 10 }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "linux-net.fullname" . }}-config
+        env:
+        - name: LINUX_NET_REDIS__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: password
+        - name: LINUX_NET_REDIS__SENTINEL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: password
+        {{- if eq .Values.config.redis.tls "true" }}
+        volumeMounts:
+        - name: redis-tls
+          mountPath: /app/redis/tls
+          readOnly: true
+      volumes:
+      - name: redis-tls
+        secret:
+          secretName: {{ include "linux-net.fullname" . }}-redis-tls
+        {{- end }}
+{{- end }}

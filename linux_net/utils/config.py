@@ -1,0 +1,175 @@
+import logging
+import os
+from pathlib import Path
+from typing import Optional
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    DirectoryPath,
+    Field,
+    FilePath,
+    ValidationError,
+    model_validator,
+)
+from pydantic_settings import (
+    BaseSettings,
+    SettingsConfigDict,
+    YamlConfigSettingsSource,
+)
+
+log = logging.getLogger(__name__)
+CONFIG_PATH = "config/config.yaml"
+
+
+class ServerConfig(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = 9000
+    external_url: Optional[str] = None  # e.g., http://linux_net.example.com:9000
+    api_key: str = Field(..., description="API key")
+    api_key_name: str = "X-API-KEY"
+    gunicorn_worker: int = Field(default_factory=lambda: 2 * os.cpu_count() + 1)  # type: ignore
+
+
+class JobConfig(BaseModel):
+    ttl: int = 1800
+    timeout: int = 300
+    result_ttl: int = 300
+
+
+class WorkerConfig(BaseModel):
+    scheduler: str = "least_load"
+    ttl: int = 300
+    pinned_per_node: int = 32
+
+
+class CredentialConfig(BaseModel):
+    enabled: bool = False
+    name: str | None = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+class RedisConfig(BaseModel):
+    class RedisTLSConfig(BaseModel):
+        enabled: bool = False
+        ca: Optional[Path] = None
+        cert: Optional[Path] = None
+        key: Optional[Path] = None
+        # NOTE: Don't use FilePath. It will check for existence even if enabled is False
+
+        @model_validator(mode="after")
+        def _check_paths(self):
+            if self.enabled:
+                for name in ("ca", "cert", "key"):
+                    value: Optional[Path] = getattr(self, name)
+                    if value is None or not value.is_file():
+                        raise ValueError(f"{name} must be an existing file when TLS is enabled")
+            return self
+
+    class RedisKeyConfig(BaseModel):
+        host_to_node_map: str = "linux_net:host_to_node_map"
+        node_info_map: str = "linux_net:node_info_map"
+
+    class RedisSentinelConfig(BaseModel):
+        enabled: bool = False
+        host: str = "redis-sentinel"
+        port: int = 26379
+        master_name: str = "mymaster"
+        password: Optional[str] = None
+
+    host: str = "localhost"
+    port: int = 6379
+    password: Optional[str] = None
+    timeout: int = 30
+    keepalive: int = 30
+    tls: RedisTLSConfig = RedisTLSConfig()
+    sentinel: RedisSentinelConfig = RedisSentinelConfig()
+    key: RedisKeyConfig = RedisKeyConfig()
+
+
+class PluginConfig(BaseModel):
+    driver: DirectoryPath = Path("linux_net/plugins/drivers/")
+    webhook: DirectoryPath = Path("linux_net/plugins/webhooks/")
+    template: DirectoryPath = Path("linux_net/plugins/templates/")
+    scheduler: DirectoryPath = Path("linux_net/plugins/schedulers/")
+    credential: DirectoryPath = Path("linux_net/plugins/credentials/")
+
+
+class LogConfig(BaseModel):
+    config: FilePath = Path("config/log-config.yaml")
+    level: str = "INFO"
+
+
+class MongoDBConfig(BaseModel):
+    enabled: bool = False
+    uri: str = "mongodb://localhost:27017"
+    database: str = "linux_net"
+    collection: str = "audit_jobs"
+    detached_collection: str = "audit_detached_tasks"
+    retention_days: int = 30
+    detached_retention_days: int = 30
+    max_documents: int = 1000000
+
+
+class StorageConfig(BaseModel):
+    staging: Path = Path("/app/storage/staging")
+    retention_hours: int = 24  # Default to 24 hours
+
+
+class AppConfig(BaseSettings):
+    # Must be provided fields
+    server: ServerConfig
+    worker: WorkerConfig
+    redis: RedisConfig
+    plugin: PluginConfig
+    mongodb: MongoDBConfig = MongoDBConfig()
+    storage: StorageConfig = StorageConfig()
+
+    # With default values
+    job: JobConfig = JobConfig()
+    log: LogConfig = LogConfig()
+    credential: CredentialConfig = CredentialConfig()
+
+    model_config = SettingsConfigDict(
+        env_prefix="LINUX_NET_",
+        env_nested_delimiter="__",
+        yaml_file=os.getenv("LINUX_NET_CONFIG_FILE", CONFIG_PATH),
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        """Read settings: env -> dotenv -> yaml -> default"""
+        return (
+            env_settings,
+            dotenv_settings,
+            YamlConfigSettingsSource(settings_cls),
+            init_settings,
+        )
+
+    @staticmethod
+    def get_host_queue_name(host: str) -> str:
+        return f"HostQ_{host}"
+
+    @staticmethod
+    def get_node_queue_name(node: str) -> str:
+        return f"NodeQ_{node}"
+
+    @staticmethod
+    def get_fifo_queue_name() -> str:
+        return "FifoQ"
+
+
+def initialize_config() -> AppConfig:
+    try:
+        return AppConfig()  # type: ignore
+    except ValidationError as e:
+        log.error(f"Error in reading config: {e}")
+        raise

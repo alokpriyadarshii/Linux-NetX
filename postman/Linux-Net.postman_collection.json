@@ -1,0 +1,3421 @@
+{
+	"info": {
+		"_postman_id": "76728976-0986-4ee8-98e8-f41f0470fe8a",
+		"name": "Linux-Net API Collection v0.4.0",
+		"description": "Linux-Net 网络设备管理 API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "7085138"
+	},
+	"item": [
+		{
+			"name": "System Health",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "检查API服务器健康状态"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Job Management",
+			"item": [
+				{
+					"name": "获取所有任务",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.json() && pm.response.json().length > 0) {",
+									"    pm.collectionVariables.set('job_id', pm.response.json()[0].id);",
+									"    console.log('任务ID已设置: ' + pm.collectionVariables.get('job_id'));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							]
+						},
+						"description": "获取系统中的所有任务"
+					},
+					"response": []
+				},
+				{
+					"name": "按ID查询任务",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}"
+							]
+						},
+						"description": "通过ID查询特定任务的详细信息"
+					},
+					"response": []
+				},
+				{
+					"name": "取消任务 - 按ID",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}"
+							]
+						},
+						"description": "取消特定任务（仅限排队中的任务）"
+					},
+					"response": []
+				},
+				{
+					"name": "取消任务 - 按FIFO队列",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs?queue=FifoQ",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							],
+							"query": [
+								{
+									"key": "queue",
+									"value": "FifoQ",
+									"description": "队列名称"
+								}
+							]
+						},
+						"description": "取消特定队列中的所有排队任务"
+					},
+					"response": []
+				},
+				{
+					"name": "取消任务 - 按pinned队列",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs?queue=pinned-{{device_host}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							],
+							"query": [
+								{
+									"key": "queue",
+									"value": "pinned-{{device_host}}",
+									"description": "演示批量并行能力：通过 /device/bulk 接口并发向多台设备下发 FIFO 任务。"
+								}
+							]
+						},
+						"description": "取消特定设备队列中的所有排队任务"
+					},
+					"response": []
+				},
+				{
+					"name": "取消任务 - 按主机",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs?host={{device_host}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							],
+							"query": [
+								{
+									"key": "host",
+									"value": "{{device_host}}",
+									"description": "设备主机地址"
+								}
+							]
+						},
+						"description": "取消绑定到特定主机的所有排队任务"
+					},
+					"response": []
+				},
+				{
+					"name": "按状态查询 - 排队中",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs?status=queued",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "queued",
+									"description": "排队中的任务"
+								}
+							]
+						},
+						"description": "查询所有排队等待执行的任务"
+					},
+					"response": []
+				},
+				{
+					"name": "按状态查询 - 执行中",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs?status=started",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "started",
+									"description": "正在执行的任务"
+								}
+							]
+						},
+						"description": "查询所有正在执行的任务"
+					},
+					"response": []
+				},
+				{
+					"name": "按状态查询 - 失败",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs?status=failed",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "failed",
+									"description": "执行失败的任务"
+								}
+							]
+						},
+						"description": "查询所有执行失败的任务"
+					},
+					"response": []
+				},
+				{
+					"name": "按状态查询 - 已完成",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs?status=finished",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "finished",
+									"description": "已完成的任务"
+								}
+							]
+						},
+						"description": "查询所有已完成的任务"
+					},
+					"response": []
+				},
+				{
+					"name": "按节点查询任务",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs?node=worker-node-1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							],
+							"query": [
+								{
+									"key": "node",
+									"value": "worker-node-1",
+									"description": "分布式节点名称，用于多节点部署时按工作节点筛选任务"
+								}
+							]
+						},
+						"description": "查询指定工作节点上的所有任务（适用于分布式部署场景）"
+					},
+					"response": []
+				},
+				{
+					"name": "列出后台任务 (Detached Tasks)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/detached-tasks?status=running",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"detached-tasks"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "running",
+									"description": "状态过滤"
+								}
+							]
+						},
+						"description": "列出所有已注册的后台任务 (Detached Tasks)。"
+					},
+					"response": []
+				},
+				{
+					"name": "查询后台任务 (Detached Tasks)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/detached-tasks/{{task_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"detached-tasks",
+								"{{task_id}}"
+							]
+						},
+						"description": "同步查询后台任务的日志和运行状态。"
+					},
+					"response": []
+				},
+				{
+					"name": "终止后台任务 (Detached Tasks)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/detached-tasks/{{task_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"detached-tasks",
+								"{{task_id}}"
+							]
+						},
+						"description": "终止指定的后台任务，清理相关资源。"
+					},
+					"response": []
+				},
+				{
+					"name": "发现后台任务 (Detached Task Discovery)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"driver\": \"paramiko\",\n    \"connection_args\": {\n        \"host\": \"{{server_host}}\",\n        \"username\": \"{{server_username}}\",\n        \"password\": \"{{server_password}}\",\n        \"port\": 22\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/detached-tasks/discover",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"detached-tasks",
+								"discover"
+							]
+						},
+						"description": "扫描设备上活跃的后台任务，重新同步到系统注册表中。"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Worker Management",
+			"item": [
+				{
+					"name": "获取所有工作进程",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.json() && pm.response.json().length > 0) {",
+									"    pm.collectionVariables.set('worker_name', pm.response.json()[0].name);",
+									"    console.log('工作器名称已设置: ' + pm.collectionVariables.get('worker_name'));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/workers",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"workers"
+							]
+						},
+						"description": "获取系统中所有活跃的工作器"
+					},
+					"response": []
+				},
+				{
+					"name": "按队列查询工作进程 - FIFO队列",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/workers?queue=FifoQ",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"workers"
+							],
+							"query": [
+								{
+									"key": "queue",
+									"value": "FifoQ",
+									"description": "FIFO队列名称"
+								}
+							]
+						},
+						"description": "查询FIFO队列中的工作器"
+					},
+					"response": []
+				},
+				{
+					"name": "按主机查询工作进程",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/workers?host={{device_host}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"workers"
+							],
+							"query": [
+								{
+									"key": "host",
+									"value": "{{device_host}}",
+									"description": "设备主机地址"
+								}
+							]
+						},
+						"description": "查询绑定到特定主机的工作器"
+					},
+					"response": []
+				},
+				{
+					"name": "删除worker - 按名称",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/workers/{{worker_name}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"workers",
+								"{{worker_name}}"
+							]
+						},
+						"description": "终止特定的工作器"
+					},
+					"response": []
+				},
+				{
+					"name": "删除worker - 按队列",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/workers?queue=FifoQ",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"workers"
+							],
+							"query": [
+								{
+									"key": "queue",
+									"value": "FifoQ",
+									"description": "FIFO队列名称"
+								}
+							]
+						},
+						"description": "终止FIFO队列中的所有工作器"
+					},
+					"response": []
+				},
+				{
+					"name": "删除worker - 按主机",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/workers?host={{device_host}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"workers"
+							],
+							"query": [
+								{
+									"key": "host",
+									"value": "{{device_host}}",
+									"description": "设备主机地址"
+								}
+							]
+						},
+						"description": "终止绑定到特定主机的所有工作器"
+					},
+					"response": []
+				},
+				{
+					"name": "按节点查询工作进程",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/workers?node=worker-node-1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"workers"
+							],
+							"query": [
+								{
+									"key": "node",
+									"value": "worker-node-1",
+									"description": "分布式节点名称，用于多节点部署时按工作节点筛选进程"
+								}
+							]
+						},
+						"description": "查询指定工作节点上的所有工作进程（适用于分布式部署场景）"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Device Connection Testing",
+			"item": [
+				{
+					"name": "Netmiko连接测试 - 基础",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"连接测试成功\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"时延在合理范围内\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.success) {",
+									"        pm.expect(jsonData.latency).to.be.a('number');",
+									"        pm.expect(jsonData.latency).to.be.above(0);",
+									"    }",
+									"});",
+									"",
+									"pm.test(\"返回驱动程序元数据\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.success) {",
+									"        pm.expect(jsonData.result).to.not.be.null;",
+									"        pm.expect(jsonData.result.driver).to.equal('netmiko');",
+									"        pm.expect(jsonData.result).to.have.property('prompt');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 30\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"test"
+							]
+						},
+						"description": "Netmiko基础连接测试 - 验证SSH连接和认证"
+					},
+					"response": []
+				},
+				{
+					"name": "Netmiko连接测试 - Vault 凭据",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Vault 凭据连接成功\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"元数据正确\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.success) {",
+									"        pm.expect(jsonData.result.driver).to.equal('netmiko');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"driver\": \"netmiko\",\n    \"connection_args\": {\n        \"device_type\": \"{{device_type}}\",\n        \"host\": \"{{device_host}}\",\n        \"port\": 10005\n    },\n    \"credential\": {\n        \"name\": \"vault_kv\",\n        \"ref\": \"{{device_cred_ref}}\",\n        \"mount\": \"kv\",\n        \"field_mapping\": {\n            \"username\": \"username\",\n            \"password\": \"password\"\n        }\n    }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"test"
+							]
+						},
+						"description": "使用 Credential 字段从 Vault 获取凭据，避免明文泄露"
+					},
+					"response": []
+				},
+				{
+					"name": "Netmiko连接测试 - 完整参数",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Netmiko 完整参数连接成功\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"返回驱动程序元数据\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.success) {",
+									"        pm.expect(jsonData.result.driver).to.equal('netmiko');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"secret\": \"{{enable_password}}\",\n    \"port\": 22,\n    \"timeout\": 60,\n    \"keepalive\": 30,\n    \"global_delay_factor\": 2,\n    \"fast_cli\": false,\n    \"verbose\": true\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"test"
+							]
+						},
+						"description": "Netmiko完整参数连接测试 - 包含所有常用连接参数"
+					},
+					"response": []
+				},
+				{
+					"name": "NAPALM连接测试 - Arista",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"NAPALM 连接成功\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"返回 NAPALM 元数据\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.success) {",
+									"        pm.expect(jsonData.result.driver).to.equal('napalm');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"napalm\",\n  \"connection_args\": {\n    \"device_type\": \"arista_eos\",\n    \"hostname\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 60,\n    \"optional_args\": {\n      \"port\": 22,\n      \"secret\": \"{{enable_password}}\",\n      \"transport\": \"ssh\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"test"
+							]
+						},
+						"description": "NAPALM 设备专用连接测试接口 - 验证跨厂商驱动连接"
+					},
+					"response": []
+				},
+				{
+					"name": "PyEAPI连接测试 - Arista (专用接口)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"PyEAPI 连接成功\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"返回 PyEAPI 元数据\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.success) {",
+									"        pm.expect(jsonData.result.driver).to.equal('pyeapi');",
+									"        pm.expect(jsonData.result).to.have.property('transport');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"pyeapi\",\n  \"connection_args\": {\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"transport\": \"https\",\n    \"port\": 443,\n    \"timeout\": 30\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"test"
+							]
+						},
+						"description": "PyEAPI 设备专用连接测试接口 - 验证基于 HTTP/HTTPS 的 API 连接"
+					},
+					"response": []
+				},
+				{
+					"name": "Paramiko连接测试 - 密码认证 (专用接口)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Paramiko 连接成功\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"返回 SSH 版本信息\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.success) {",
+									"        pm.expect(jsonData.result.driver).to.equal('paramiko');",
+									"        pm.expect(jsonData.result).to.have.property('remote_version');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\",\n    \"port\": 22,\n    \"timeout\": 30.0,\n    \"host_key_policy\": \"auto_add\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"test"
+							]
+						},
+						"description": "Paramiko 专用测试接口 - 验证 Linux 服务器 SSH 密码认证"
+					},
+					"response": []
+				},
+				{
+					"name": "Paramiko连接测试 - Vault 凭据 (密码)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Paramiko Vault 密码连接成功\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"返回 SSH 版本信息\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.success) {",
+									"        pm.expect(jsonData.result.driver).to.equal('paramiko');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"port\": 22\n  },\n  \"credential\": {\n    \"name\": \"vault_kv\",\n    \"ref\": \"{{server_cred_ref}}\",\n    \"mount\": \"kv\",\n    \"field_mapping\": {\n      \"username\": \"username\",\n      \"password\": \"password\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"test"
+							]
+						},
+						"description": "Paramiko 专用测试接口 - 验证从 Vault 获取密码认证"
+					},
+					"response": []
+				},
+				{
+					"name": "Paramiko连接测试 - Vault 凭据 (密钥)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Paramiko Vault 密钥连接成功\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.success).to.be.true;",
+									"});",
+									"",
+									"pm.test(\"私约解析成功\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.success) {",
+									"        pm.expect(jsonData.result.driver).to.equal('paramiko');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"port\": 22\n  },\n  \"credential\": {\n    \"name\": \"vault_kv\",\n    \"ref\": \"{{server_cred_ref}}\",\n    \"mount\": \"kv\",\n    \"field_mapping\": {\n      \"username\": \"username\",\n      \"pkey\": \"ssh_private_key\",\n      \"passphrase\": \"key_passphrase\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"test"
+							]
+						},
+						"description": "Paramiko 专用测试接口 - 验证从 Vault 获取私钥认证"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Netmiko Driver - Network Device",
+			"item": [
+				{
+					"name": "Query & Delay Control (driver_args)",
+					"item": [
+						{
+							"name": "基础查询 - 无参数",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\"\n  },\n  \"command\": \"display version\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "最简单的单命令查询 - 不使用任何高级参数"
+							},
+							"response": []
+						},
+						{
+							"name": "基础查询 - Vault 凭据",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"driver\": \"netmiko\",\n    \"connection_args\": {\n        \"device_type\": \"{{device_type}}\",\n        \"host\": \"{{device_host}}\",\n        \"port\": 10005\n    },\n    \"credential\": {\n        \"name\": \"vault_kv\",\n        \"ref\": \"{{device_cred_ref}}\",\n        \"mount\": \"kv\",\n        \"field_mapping\": {\n            \"username\": \"username\",\n            \"password\": \"password\"\n        }\n    },\n    \"command\": \"show version\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "使用 Credential 字段从 Vault 获取凭据，避免明文泄露"
+							},
+							"response": []
+						},
+						{
+							"name": "基础查询 - FIFO队列",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\"\n  },\n  \"command\": \"show ip interface brief\",\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 180\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "基础执行：FIFO 队列策略，180秒 TTL。"
+							},
+							"response": []
+						},
+						{
+							"name": "基础查询 - Pinned队列",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\"\n  },\n  \"command\": \"show interfaces status\",\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "会话持久化：Pinned 队列策略，实现跨请求的连接复用。"
+							},
+							"response": []
+						},
+						{
+							"name": "Timeout & Delay (Netmiko)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 120,\n    \"global_delay_factor\": 3\n  },\n  \"command\": \"show running-config\",\n  \"driver_args\": {\n    \"read_timeout\": 120,\n    \"delay_factor\": 4,\n    \"max_loops\": 1000,\n    \"auto_find_prompt\": true,\n    \"strip_prompt\": true,\n    \"cmd_verify\": false\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "展示 driver_args 的 read_timeout, delay_factor, global_delay_factor 等参数的联动。"
+							},
+							"response": []
+						},
+						{
+							"name": "Output Normalization (driver_args)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 60,\n    \"keepalive\": 30\n  },\n  \"command\": \"dis cu\",\n  \"driver_args\": {\n    \"read_timeout\": 60,\n    \"delay_factor\": 2,\n    \"max_loops\": 1000,\n    \"auto_find_prompt\": true,\n    \"strip_prompt\": true,\n    \"strip_command\": true,\n    \"normalize\": true,\n    \"cmd_verify\": false\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "展示 driver_args 的 strip_prompt, normalize, auto_find_prompt 组合。"
+							},
+							"response": []
+						},
+						{
+							"name": "查询 - 带Webhook回调",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\"\n  },\n  \"command\": \"show version\",\n  \"driver_args\": {\n    \"read_timeout\": 45,\n    \"strip_prompt\": true,\n    \"normalize\": true\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 300,\n  \"webhook\": {\n    \"name\": \"basic\",\n    \"url\": \"http://127.0.0.1:8888/webhook\",\n    \"method\": \"POST\",\n    \"headers\": {\n      \"Content-Type\": \"application/json\"\n    },\n    \"timeout\": 30\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "带Webhook回调的查询 - 自动推送结果到外部系统"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Config & Verification (modes)",
+					"item": [
+						{
+							"name": "Netmiko 基础配置 - 单命令",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"secret\": \"{{enable_password}}\"\n  },\n  \"config\": \"hostname Linux-Net-SW01\",\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "最简单的单配置推送 - 修改主机名"
+							},
+							"response": []
+						},
+						{
+							"name": "Verification Control (cmd_verify)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"secret\": \"{{enable_password}}\"\n  },\n  \"config\": \"ip domain-name company.local\",\n  \"driver_args\": {\n    \"exit_config_mode\": true,\n    \"enter_config_mode\": true,\n    \"cmd_verify\": true,\n    \"delay_factor\": 1,\n    \"error_pattern\": \"% Invalid|% Error\"\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "展示 cmd_verify, error_pattern 及模式切换控制。"
+							},
+							"response": []
+						},
+						{
+							"name": "接口配置 - 基础",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"secret\": \"{{enable_password}}\"\n  },\n  \"config\": [\n    \"interface GigabitEthernet0/1\",\n    \"description Server Connection\",\n    \"switchport mode access\",\n    \"switchport access vlan 100\",\n    \"no shutdown\"\n  ],\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "基础接口配置 - 单个接口设置"
+							},
+							"response": []
+						},
+						{
+							"name": "批量接口配置 - 带driver_args",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"secret\": \"{{enable_password}}\"\n  },\n  \"config\": [\n    \"interface range GigabitEthernet0/1-10\",\n    \"description User Ports\",\n    \"switchport mode access\",\n    \"switchport access vlan 200\",\n    \"spanning-tree portfast\",\n    \"spanning-tree bpduguard enable\",\n    \"no shutdown\"\n  ],\n  \"driver_args\": {\n    \"exit_config_mode\": true,\n    \"enter_config_mode\": true,\n    \"cmd_verify\": true,\n    \"delay_factor\": 2,\n    \"read_timeout\": 60,\n    \"error_pattern\": \"% Invalid|% Error|% Bad\"\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "批量接口配置 - 范围配置和安全特性"
+							},
+							"response": []
+						},
+						{
+							"name": "Netmiko - 高级配置推送",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"secret\": \"{{enable_password}}\"\n  },\n  \"config\": [\n    \"interface range GigabitEthernet0/1-10\",\n    \"description Batch Configuration by Linux-Net\",\n    \"switchport mode access\",\n    \"switchport access vlan 200\",\n    \"spanning-tree portfast\",\n    \"no shutdown\"\n  ],\n  \"driver_args\": {\n    \"exit_config_mode\": true,\n    \"config_mode_command\": \"configure terminal\",\n    \"enter_config_mode\": true,\n    \"cmd_verify\": true,\n    \"delay_factor\": 2,\n    \"read_timeout\": 60,\n    \"error_pattern\": \"% Invalid|% Error|% Bad\",\n    \"terminator\": \"#\",\n    \"strip_prompt\": false,\n    \"strip_command\": false\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 600,\n  \"webhook\": {\n    \"url\": \"https://config-mgmt.company.com/callback\",\n    \"method\": \"POST\"\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "高级配置推送，包含driver_args配置和webhook回调"
+							},
+							"response": []
+						},
+						{
+							"name": "系统配置 - 完整设置",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"secret\": \"{{enable_password}}\"\n  },\n  \"config\": [\n    \"ntp server 8.8.8.8\",\n    \"ntp server 8.8.4.4\",\n    \"logging host 192.168.1.100\",\n    \"logging trap informational\",\n    \"snmp-server community public RO\",\n    \"snmp-server location Datacenter-Rack01\",\n    \"snmp-server contact alokpriyadarshi618@gmail.com\",\n    \"ip domain-name company.local\",\n    \"clock timezone EST -5\",\n    \"service timestamps log datetime msec\"\n  ],\n  \"driver_args\": {\n    \"exit_config_mode\": true,\n    \"enter_config_mode\": true,\n    \"cmd_verify\": true,\n    \"delay_factor\": 1,\n    \"read_timeout\": 45,\n    \"error_pattern\": \"% Invalid|% Error\",\n    \"strip_prompt\": false,\n    \"strip_command\": false\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 600,\n  \"webhook\": {\n    \"url\": \"https://config-mgmt.company.com/device-config\",\n    \"method\": \"POST\",\n    \"headers\": {\n      \"Authorization\": \"Bearer {{config_token}}\"\n    }\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "系统级配置推送 - NTP、日志、SNMP等基础设施"
+							},
+							"response": []
+						},
+						{
+							"name": "安全配置 - ACL和认证",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"secret\": \"{{enable_password}}\"\n  },\n  \"config\": [\n    \"ip access-list extended MANAGEMENT_ACCESS\",\n    \"permit tcp 192.168.1.0 0.0.0.255 any eq 22\",\n    \"permit tcp 192.168.1.0 0.0.0.255 any eq 443\",\n    \"permit icmp 192.168.1.0 0.0.0.255 any\",\n    \"deny ip any any log\",\n    \"exit\",\n    \"line vty 0 4\",\n    \"access-class MANAGEMENT_ACCESS in\",\n    \"transport input ssh\",\n    \"exit\",\n    \"ip ssh version 2\",\n    \"ip ssh time-out 60\",\n    \"ip ssh authentication-retries 3\"\n  ],\n  \"driver_args\": {\n    \"exit_config_mode\": true,\n    \"enter_config_mode\": true,\n    \"cmd_verify\": true,\n    \"delay_factor\": 2,\n    \"read_timeout\": 60,\n    \"error_pattern\": \"% Invalid|% Error|% Incomplete\"\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "安全配置推送 - ACL和SSH安全设置"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "NAPALM Driver - Network Device",
+			"item": [
+				{
+					"name": "NAPALM - Retrieval (driver_args)",
+					"item": [
+						{
+							"name": "基础数据收集",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"napalm\",\n  \"connection_args\": {\n    \"device_type\": \"eos\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\"\n  },\n  \"command\": \"get_facts\",\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "NAPALM基础设备事实收集 - 跨厂商标准化"
+							},
+							"response": []
+						},
+						{
+							"name": "多方法组合查询",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"napalm\",\n  \"connection_args\": {\n    \"device_type\": \"ios\",\n    \"hostname\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 60,\n    \"optional_args\": {\n      \"port\": 22,\n      \"secret\": \"{{enable_password}}\"\n    }\n  },\n  \"command\": [\n    \"get_facts\",\n    \"get_interfaces\",\n    \"get_interfaces_ip\",\n    \"get_arp_table\",\n    \"get_mac_address_table\"\n  ],\n  \"driver_args\": {\n    \"retrieve\": \"all\",\n    \"full\": true,\n    \"sanitized\": false\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "NAPALM多方法组合查询 - 全面设备状态收集"
+							},
+							"response": []
+						},
+						{
+							"name": "路由信息查询",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"napalm\",\n  \"connection_args\": {\n    \"device_type\": \"iosxr\",\n    \"hostname\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"optional_args\": {\n      \"port\": 22,\n      \"secret\": \"{{enable_password}}\"\n    }\n  },\n  \"command\": [\n    \"get_route_to\",\n    \"get_bgp_neighbors\",\n    \"get_bgp_neighbors_detail\"\n  ],\n  \"driver_args\": {\n    \"destination\": \"8.8.8.8\",\n    \"protocol\": \"ipv4\"\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 450\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "NAPALM路由和BGP信息查询 - 网络协议状态"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "NAPALM - Config & Commit",
+					"item": [
+						{
+							"name": "基础配置推送",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"napalm\",\n  \"connection_args\": {\n    \"device_type\": \"ios\",\n    \"hostname\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"optional_args\": {\n      \"secret\": \"{{enable_password}}\"\n    }\n  },\n  \"config\": \"hostname NAPALM-Test-Device\",\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "NAPALM基础配置推送 - 单命令配置"
+							},
+							"response": []
+						},
+						{
+							"name": "Commit Confirm (replace/confirm)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"napalm\",\n  \"connection_args\": {\n    \"device_type\": \"junos\",\n    \"hostname\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\"\n  },\n  \"config\": {\n    \"snmp\": {\n      \"community\": \"napalm_ro\",\n      \"location\": \"Datacenter-01\",\n      \"contact\": \"alokpriyadarshi618@gmail.com\"\n    },\n    \"ntp\": {\n      \"servers\": [\n        \"8.8.8.8\",\n        \"8.8.4.4\"\n      ]\n    }\n  },\n  \"driver_args\": {\n    \"replace\": true,\n    \"commit_message\": \"NAPALM configuration replacement\",\n    \"confirm\": 120\n  },\n  \"rendering\": {\n    \"template\": \"snmp community {{ snmp.community }} authorization read-only\\nsnmp location {{ snmp.location }}\\nsnmp contact {{ snmp.contact }}\\n{% for server in ntp.servers %}ntp server {{ server }}\\n{% endfor %}\"\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "NAPALM配置替换 - 使用模板渲染和replace模式"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "PyEAPI Driver - Arista Device",
+			"item": [
+				{
+					"name": "PyEAPI - Query & Encoding",
+					"item": [
+						{
+							"name": "基础eAPI查询 (format=json)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"pyeapi\",\n  \"connection_args\": {\n    \"host\": \"{{device_host_2}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"transport\": \"https\",\n    \"port\": 443\n  },\n  \"command\": \"show version\",\n  \"driver_args\": {\n    \"encoding\": \"json\",\n    \"format\": \"json\"\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "PyEAPI基础查询 - JSON格式输出"
+							},
+							"response": []
+						},
+						{
+							"name": "多命令JSON查询",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"pyeapi\",\n  \"connection_args\": {\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"transport\": \"https\",\n    \"port\": 443,\n    \"timeout\": 60\n  },\n  \"command\": [\n    \"show version\",\n    \"show interfaces status\",\n    \"show ip interface brief\",\n    \"show vlan brief\",\n    \"show mac address-table\"\n  ],\n  \"driver_args\": {\n    \"encoding\": \"json\",\n    \"format\": \"json\",\n    \"timestamps\": true\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "PyEAPI多命令JSON查询 - 结构化数据收集"
+							},
+							"response": []
+						},
+						{
+							"name": "高级eAPI查询 - 带解析",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"pyeapi\",\n  \"connection_args\": {\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"transport\": \"https\",\n    \"port\": 443\n  },\n  \"command\": \"show interfaces ethernet status\",\n  \"driver_args\": {\n    \"encoding\": \"json\",\n    \"format\": \"json\",\n    \"expand\": true,\n    \"detail\": true\n  },\n  \"parsing\": {\n    \"name\": \"json\",\n    \"path\": \"interfaceStatuses\"\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 300,\n  \"webhook\": {\n    \"url\": \"https://monitoring.company.com/arista-interfaces\",\n    \"method\": \"POST\",\n    \"headers\": {\n      \"Authorization\": \"Bearer {{api_token}}\"\n    }\n  }\n}"
+								},
+								"url": {
+									"raw": "/device/exec",
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "PyEAPI高级查询 - JSON解析和webhook集成。注意：解析后的结构化数据现在存放在每条命令结果的 'parsed' 字段中，不再覆盖原始输出。"
+							},
+							"response": [
+								{
+									"name": "解析后的结果示例",
+									"originalRequest": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"driver\": \"pyeapi\",\n  \"connection_args\": {\"host\": \"10.1.1.1\"},\n  \"command\": \"show version\",\n  \"parsing\": {\"name\": \"json\"}\n}"
+										},
+										"url": {
+											"raw": "{{base_url}}/device/exec",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"device",
+												"exec"
+											]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [],
+									"cookie": [],
+									"body": "{\n    \"id\": \"job-id-123\",\n    \"status\": \"queued\",\n    \"queue\": \"FifoQ\"\n}\n\n// 获取任务结果后的 retval 结构如下：\n{\n    \"show version\": {\n        \"output\": \"{ \\\"version\\\": \\\"4.25.0F\\\", ... }\",\n        \"error\": \"\",\n        \"exit_status\": 0,\n        \"telemetry\": {\n            \"duration_seconds\": 0.152\n        },\n        \"parsed\": {\n            \"version\": \"4.25.0F\",\n            \"model\": \"vEOS\"\n        }\n    }\n}"
+								}
+							]
+						}
+					]
+				},
+				{
+					"name": "PyEAPI - Config Modes",
+					"item": [
+						{
+							"name": "VLAN批量配置 (autoComplete, expandAliases)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"pyeapi\",\n  \"connection_args\": {\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"transport\": \"https\",\n    \"port\": 443\n  },\n  \"config\": [\n    \"vlan 100\",\n    \"name DATA_VLAN\",\n    \"vlan 200\",\n    \"name VOICE_VLAN\",\n    \"vlan 300\",\n    \"name GUEST_VLAN\",\n    \"interface range Ethernet1-10\",\n    \"switchport mode access\",\n    \"switchport access vlan 100\"\n  ],\n  \"driver_args\": {\n    \"format\": \"text\",\n    \"autoComplete\": true,\n    \"expandAliases\": true\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "演示 pyeapi 特有参数：format (text), autoComplete, expandAliases 组合。"
+							},
+							"response": []
+						},
+						{
+							"name": "BGP配置 (Template Rendering)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"pyeapi\",\n  \"connection_args\": {\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"transport\": \"https\",\n    \"port\": 443\n  },\n  \"config\": {\n    \"local_asn\": 65001,\n    \"router_id\": \"1.1.1.1\",\n    \"neighbors\": [\n      {\n        \"ip\": \"10.1.1.2\",\n        \"asn\": 65002,\n        \"description\": \"Peer-1\"\n      },\n      {\n        \"ip\": \"10.1.1.3\",\n        \"asn\": 65003,\n        \"description\": \"Peer-2\"\n      }\n    ]\n  },\n  \"driver_args\": {\n    \"format\": \"text\",\n    \"autoComplete\": true\n  },\n  \"rendering\": {\n    \"template\": \"router bgp {{ local_asn }}\\n router-id {{ router_id }}\\n{% for neighbor in neighbors %}\\n neighbor {{ neighbor.ip }} remote-as {{ neighbor.asn }}\\n neighbor {{ neighbor.ip }} description {{ neighbor.description }}\\n{% endfor %}\"\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "演示 eAPI 模板化配置：结合核心渲染引擎下发结构化变更。"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Paramiko Driver - Linux Server",
+			"item": [
+				{
+					"name": "Standard Execution (driver_args & sudo)",
+					"item": [
+						{
+							"name": "基础查询 - 单命令",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\",\n    \"port\": 22,\n    \"timeout\": 30.0\n  },\n  \"command\": \"uname -a\",\n  \"queue_strategy\": \"fifo\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "Paramiko基础单命令查询。返回格式已升级为包含 output, error, exit_status 和 telemetry 的统一富字典格式。"
+							},
+							"response": [
+								{
+									"name": "统一响应格式示例",
+									"originalRequest": {
+										"method": "POST",
+										"header": [],
+										"body": {
+											"mode": "raw",
+											"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\"host\": \"10.1.1.5\"},\n  \"command\": \"uname -a\"\n}"
+										},
+										"url": {
+											"raw": "{{base_url}}/device/exec",
+											"host": [
+												"{{base_url}}"
+											],
+											"path": [
+												"device",
+												"exec"
+											]
+										}
+									},
+									"status": "Created",
+									"code": 201,
+									"_postman_previewlanguage": "json",
+									"header": [],
+									"cookie": [],
+									"body": "/* 提交任务后，从 GET /jobs/{id} 获取到的 result.retval 将如下所示 */\n{\n    \"uname -a\": {\n        \"output\": \"Linux server 5.4.0-101-generic #114-Ubuntu SMP...\",\n        \"error\": \"\",\n        \"exit_status\": 0,\n        \"telemetry\": {\n            \"duration_seconds\": 0.045\n        }\n    }\n}"
+								}
+							]
+						},
+						{
+							"name": "多命令查询 - 系统信息",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\",\n    \"port\": 22\n  },\n  \"command\": [\n    \"uname -a\",\n    \"df -h\",\n    \"free -m\",\n    \"uptime\",\n    \"whoami\"\n  ],\n  \"driver_args\": {\n    \"timeout\": 30.0\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "Paramiko多命令查询 - 系统信息采集"
+							},
+							"response": []
+						},
+						{
+							"name": "查询 - 网络诊断-pinned",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"command\": [\n    \"ip addr show\",\n    \"ip route show\",\n    \"ss -tuln\",\n    \"netstat -rn\"\n  ],\n  \"driver_args\": {\n    \"timeout\": 60.0\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "Paramiko网络诊断 - 网络配置和连接状态"
+							},
+							"response": []
+						},
+						{
+							"name": "查询 - Vault 凭据 (密码)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"port\": 22\n  },\n  \"credential\": {\n    \"name\": \"vault_kv\",\n    \"ref\": \"{{server_cred_ref}}\",\n    \"mount\": \"kv\",\n    \"field_mapping\": {\n      \"username\": \"username\",\n      \"password\": \"password\"\n    }\n  },\n  \"command\": \"uptime\",\n  \"queue_strategy\": \"fifo\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "Paramiko 查询 - 使用 Vault 获取用户名和密码"
+							},
+							"response": []
+						},
+						{
+							"name": "查询 - Vault 凭据 (key)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"driver\": \"paramiko\",\n    \"connection_args\": {\n        \"host\": \"{{server_host}}\",\n        \"port\": 22\n    },\n    \"credential\": {\n        \"ref\": \"{{server_cred_ref}}\"\n    },\n    \"command\": \"uptime\",\n    \"queue_strategy\": \"fifo\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "Paramiko 查询 - 使用 Vault 获取私钥字符串(pkey)"
+							},
+							"response": []
+						},
+						{
+							"name": "查询 - Vault 凭据 (key)-mapping",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"port\": 22\n  },\n  \"credential\": {\n    // name和mount这两个参数可以默认不传，\n    \"name\": \"vault_kv\",\n    \"ref\": \"{{server_cred_ref}}\",\n    \"mount\": \"kv\",\n    // vault中username、password、pkey是默认固定的，如果vault中用的key是这三个，就不用field_mapping\n    \"field_mapping\": {\n      \"username\": \"username\",\n      \"pkey\": \"pkey\"\n    }\n  },\n  \"command\": \"uptime\",\n  \"queue_strategy\": \"fifo\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "Paramiko 查询 - 使用 Vault 获取私钥字符串(pkey)"
+							},
+							"response": []
+						},
+						{
+							"name": "查询 - 环境注入 (Environment)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"command\": \"echo $APP_VERSION; ls -l $TOOL_PATH\",\n  \"driver_args\": {\n    \"environment\": {\n      \"APP_VERSION\": \"v2.4.0\",\n      // 这里故意引入了一个错误的环境变量，让命令无法执行，应该返回 \"error\": \"ls: cannot access '/opt/rdma/bin': No such file or directory\\n\",\n      \"TOOL_PATH\": \"/opt/rdma/bin\"\n    }\n  },\n  \"queue_strategy\": \"fifo\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "通过 API 注入远程服务器的环境变量，避免在命令字符串中手动写 export。"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Config & Elevation (sudo)",
+					"item": [
+						{
+							"name": "Paramiko 基础配置 - 单命令",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"config\": \"echo 'Hello World' > /tmp/test.txt\",\n  \"queue_strategy\": \"fifo\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "Paramiko基础配置 - 单命令执行"
+							},
+							"response": []
+						},
+						{
+							"name": "Sudo Elevation (sudo_password)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"config\": [\n    \"echo 'Welcome to Linux-Net Managed Server!' > /etc/motd\",\n    \"ls -l /etc/motd\"\n  ],\n  \"driver_args\": {\n    \"sudo\": true,\n    \"sudo_password\": \"{{sudo_password}}\",\n    \"timeout\": 60.0\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "演示 sudo, sudo_password, get_pty 等参数的联动，实现提权执行。"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Session Features",
+					"item": [
+						{
+							"name": "Interactive Command (expect_map, get_pty)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"command\": \"ssh-keygen -t rsa -b 2048 -f /tmp/id_rsa_test\",\n  \"driver_args\": {\n    // 交互式命令，可以对交互过程中的提示进行输入\n    \"get_pty\": true,\n    \"expect_map\": {\n      \"Enter passphrase\": \"demo-passphrase\",\n      \"Enter same passphrase again\": \"demo-passphrase\"\n    }\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "用于执行需要二次交互确认的命令（如 passwd, sudo 提权等）。通过 expect_map 定义关键字匹配逻辑，控制器在检测到匹配项时自动注入对应的输入流。"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "File Transfer Mechanics (SFTP)",
+					"item": [
+						{
+							"name": "基础文件上传 (Multipart Upload)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "request",
+											"value": "{\n    \"driver\": \"paramiko\",\n    \"connection_args\": {\n        \"host\": \"{{server_host}}\",\n        \"username\": \"{{server_username}}\",\n        \"password\": \"{{server_password}}\"\n    },\n    \"file_transfer\": {\n        \"operation\": \"upload\",\n        \"remote_path\": \"/tmp/uploaded_postman_test.txt\"\n    }\n}",
+											"type": "text"
+										},
+										{
+											"key": "file",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "使用 Multipart/Form-Data 上传文件并通过 Paramiko 传输至服务器。"
+							},
+							"response": []
+						},
+						{
+							"name": "上传脚本并即时执行 (Upload & Execute)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "request",
+											"value": "{\n    \"driver\": \"paramiko\",\n    \"connection_args\": {\n        \"host\": \"{{server_host}}\",\n        \"username\": \"{{server_username}}\",\n        \"password\": \"{{server_password}}\"\n    },\n    \"file_transfer\": {\n        \"operation\": \"upload\",\n        \"remote_path\": \"/tmp/linux_net/sys_check.sh\",\n        \"chmod\": \"0755\",\n        \"execute_after_upload\": true,\n        \"execute_command\": \"bash /tmp/linux_net/sys_check.sh\",\n        \"cleanup_after_exec\": false\n    }\n}",
+											"type": "text"
+										},
+										{
+											"key": "file",
+											"type": "file",
+											"src": "/Users/wli04/Desktop/sys_check.sh"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "高级用法：上传一个 Shell 脚本，设置权限，立刻执行，并且执行完后自动清理掉上传的源文件。"
+							},
+							"response": []
+						},
+						{
+							"name": "Paramiko - 下载文件 (Download to Worker OS)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"driver\": \"paramiko\",\n    \"connection_args\": {\n        \"host\": \"{{server_host}}\",\n        \"username\": \"{{server_username}}\",\n        \"password\": \"{{server_password}}\"\n    },\n    \"queue_strategy\": \"fifo\",\n    \"file_transfer\": {\n        \"operation\": \"download\",\n        \"remote_path\": \"/var/log/syslog\",\n        \"local_path\": \"/app/storage/staging/syslog_backup.log\"\n    }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "Paramiko 下载文件：将远程 Linux 服务器上的文件（例如日志），下载并保存到 Linux-Net Worker 容器内的 /tmp 目录下。 注意：想要把文件进一步下载到本机(A)，请把 local_path 设在 `/app/storage/staging/` 目录下，随后调用 `/device/download` 接口拉取。"
+							},
+							"response": []
+						},
+						{
+							"name": "从服务器拉取已下载文件 (Get from Worker API)",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/device/files/syslog_backup.log",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"files",
+										"syslog_backup.log"
+									]
+								},
+								"description": "在上一步 `Paramiko - 下载文件` 指令成功完成后，可以立刻调用此 GET HTTP 接口将文件从 Worker OS （`/app/storage/staging` 存放区）真正拉取到你的浏览器或电脑端(A)。"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Proxy & Tunneling (Jump Host)",
+					"item": [
+						{
+							"name": "通过代理连接 - 密码认证",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\",\n    \"proxy_host\": \"{{proxy_host}}\",\n    \"proxy_username\": \"{{proxy_username}}\",\n    \"proxy_password\": \"{{proxy_password}}\",\n    \"proxy_port\": 22\n  },\n  \"command\": \"uname -a\",\n  \"queue_strategy\": \"fifo\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "通过中间跳板机（Jump Host）透明访问内网目标机器。"
+							},
+							"response": []
+						},
+						{
+							"name": "代理跳转 - 目标机免密 (Agent/Key)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"10.0.0.50\",\n    \"username\": \"target_user\",\n    \"proxy_host\": \"{{proxy_host}}\",\n    \"proxy_username\": \"{{proxy_username}}\",\n    \"proxy_password\": \"{{proxy_password}}\",\n    \"look_for_keys\": true,\n    \"allow_agent\": true\n  },\n  \"command\": \"uptime\",\n  \"queue_strategy\": \"fifo\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "场景：你拥有跳板机的密码，且跳板机或本地已配置对目标机的免密访问。"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Detached Task Management (Async)",
+					"item": [
+						{
+							"name": "Start Detached Task - 无推送",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"command\": \"vmstat 5 60 | cat -n\",\n  \"detach\": true,\n  \"driver_args\": {\n    \"max_age\": 86400\n  },\n  \"queue_strategy\": \"pinned\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "启动后台任务并返回 task_id。"
+							},
+							"response": []
+						},
+						{
+							"name": "Start Detached Task - Webhook 订阅模式",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"command\": \"vmstat 5 60 | cat -n\",\n  \"detach\": true,\n  \"push_interval\": 15,\n  \"webhook\": {\n    \"url\": \"http://10.155.30.35:8888/webhook\",\n    \"name\": \"basic\"\n  },\n  \"queue_strategy\": \"pinned\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "开启自动推送模式，每隔 push_interval 秒向 Webhook 传输日志增量。"
+							},
+							"response": []
+						},
+						{
+							"name": "Start Detached Task - Webhook 无中断订阅",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"command\": \"vmstat 5 60 | cat -n\",\n  \"detach\": true,\n  \"push_interval\": 15,\n  \"webhook\": {\n    \"url\": \"http://10.155.30.35:8888/webhook\",\n    \"name\": \"basic\"\n  },\n  \"queue_strategy\": \"pinned\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "开启自动推送模式，每隔 push_interval 秒向 Webhook 传输日志增量。"
+							},
+							"response": []
+						},
+						{
+							"name": "Query Task Status",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/detached-tasks/{{task_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"detached-tasks",
+										"{{task_id}}"
+									]
+								},
+								"description": "获取任务的详细日志和最新执行情况。\n注意：将 {{task_id}} 替换为你通过 /device/exec 启动任务后返回的 id 。"
+							},
+							"response": []
+						},
+						{
+							"name": "获取集群活动任务清单",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/detached-tasks",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"detached-tasks"
+									]
+								},
+								"description": "从 Redis 注册表中直接拉取当前系统中所有存在的 Detached Tasks。"
+							},
+							"response": []
+						},
+						{
+							"name": "获取集群活动任务清单-running",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/detached-tasks?status=running",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"detached-tasks"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "running"
+										}
+									]
+								},
+								"description": "从 Redis 注册表中直接拉取当前系统中所有存在的 Detached Tasks。"
+							},
+							"response": []
+						},
+						{
+							"name": "Task discover",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/detached-tasks/discover",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"detached-tasks",
+										"discover"
+									]
+								},
+								"description": "从 Redis 注册表中直接拉取当前系统中所有存在的 Detached Tasks。"
+							},
+							"response": []
+						},
+						{
+							"name": "强杀进程并清理 (Kill & Cleanup)",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/detached-tasks/{{task_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"detached-tasks",
+										"{{task_id}}"
+									]
+								},
+								"description": "强制终止进程并清理任务文件。"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Paramiko - 启动后台任务 (Detached Execution)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.json() && pm.response.json().id) {",
+									"    pm.collectionVariables.set('task_id', pm.response.json().id);",
+									"    console.log('Task ID已设置: ' + pm.collectionVariables.get('task_id'));",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"driver\": \"paramiko\",\n    \"connection_args\": {\n        \"host\": \"{{server_host}}\",\n        \"username\": \"{{server_username}}\",\n        \"password\": \"{{server_password}}\",\n        \"port\": 22\n    },\n    \"command\": [\n        \"ping 8.8.8.8 -c 100\"\n    ],\n    \"detach\": true,\n    \"push_interval\": 10\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/exec",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"exec"
+							]
+						},
+						"description": "在目标服务器后台启动长时间运行的任务（如ping、stress），并返回 Task ID。"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Network Storage & File Gateway",
+			"item": [
+				{
+					"name": "Paramiko - 上传文件 (Upload Multipart)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "request",
+									"value": "{\n    \"driver\": \"paramiko\",\n    \"connection_args\": {\n        \"host\": \"{{server_host}}\",\n        \"username\": \"{{server_username}}\",\n        \"password\": \"{{server_password}}\"\n    },\n    \"file_transfer\": {\n        \"operation\": \"upload\",\n        \"remote_path\": \"/tmp/test_upload.txt\"\n    }\n}",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/device/exec",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"exec"
+							]
+						},
+						"description": "使用 Paramiko 通过 Multipart 上传文件到 Linux 服务器。"
+					},
+					"response": []
+				},
+				{
+					"name": "Paramiko - 下载文件 (Download JSON)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"driver\": \"paramiko\",\n    \"connection_args\": {\n        \"host\": \"{{server_host}}\",\n        \"username\": \"{{server_username}}\",\n        \"password\": \"{{server_password}}\"\n    },\n    \"file_transfer\": {\n        \"operation\": \"download\",\n        \"remote_path\": \"/etc/hosts\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/device/exec",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"exec"
+							]
+						},
+						"description": "使用 Paramiko 从 Linux 服务器下载文件。任务完成后将生成 download_url。"
+					},
+					"response": []
+				},
+				{
+					"name": "Paramiko - 后台任务组合 (Upload + Detached Exec)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "request",
+									"value": "{\n    \"driver\": \"paramiko\",\n    \"connection_args\": {\n        \"host\": \"{{server_host}}\",\n        \"username\": \"{{server_username}}\",\n        \"password\": \"{{server_password}}\"\n    },\n    \"run_in_background\": true,\n    \"file_transfer\": {\n        \"operation\": \"upload\",\n        \"remote_path\": \"/tmp/background_script.sh\",\n        \"execute_after_upload\": true,\n        \"execute_command\": \"bash /tmp/background_script.sh\"\n    }\n}",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/device/exec",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"exec"
+							]
+						},
+						"description": "组合案例：通过 Paramiko 上传脚本并立即以 Detached 模式在后台运行。适用于长时间运行的安装或维护任务。"
+					},
+					"response": []
+				},
+				{
+					"name": "Netmiko - 上传文件 (Upload Multipart)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "request",
+									"value": "{\n    \"driver\": \"netmiko\",\n    \"connection_args\": {\n        \"device_type\": \"{{device_type}}\",\n        \"host\": \"{{device_host}}\",\n        \"username\": \"{{device_username}}\",\n        \"password\": \"{{device_password}}\"\n    },\n    \"file_transfer\": {\n        \"operation\": \"upload\",\n        \"remote_path\": \"flash:test_config.txt\"\n    }\n}",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/device/exec",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"exec"
+							]
+						},
+						"description": "使用 Netmiko 通过 Multipart 上传文件到网络设备 (iOS/Nexus/Arista等)。"
+					},
+					"response": []
+				},
+				{
+					"name": "Netmiko - 下载文件 (Download JSON)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"driver\": \"netmiko\",\n    \"connection_args\": {\n        \"device_type\": \"{{device_type}}\",\n        \"host\": \"{{device_host}}\",\n        \"username\": \"{{device_username}}\",\n        \"password\": \"{{device_password}}\"\n    },\n    \"file_transfer\": {\n        \"operation\": \"download\",\n        \"remote_path\": \"flash:startup.cfg\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/device/exec",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"exec"
+							]
+						},
+						"description": "使用 Netmiko 从网络设备下载文件。任务完成后将生成 download_url。"
+					},
+					"response": []
+				},
+				{
+					"name": "PyEAPI (Arista) - 模拟下载 (via Command)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"driver\": \"pyeapi\",\n    \"connection_args\": {\n        \"host\": \"{{device_host}}\",\n        \"username\": \"{{device_username}}\",\n        \"password\": \"{{device_password}}\",\n        \"transport\": \"https\"\n    },\n    \"command\": \"copy running-config sftp://{{server_host}}/tmp/arista_backup.txt\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/exec",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"exec"
+							]
+						},
+						"description": "由于 PyEAPI 是基于 HTTP 的，通常使用设备原生的 copy 命令将文件推送到外部服务器。如果需要直接获取文件流，建议切换到 Netmiko 驱动进行 File Transfer 操作。"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Bulk Operations",
+			"item": [
+				{
+					"name": "Homogeneous Bulk Operations",
+					"item": [
+						{
+							"name": "基础批量查询 (Parallel Execution)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\"\n  },\n  \"devices\": [\n    {\"host\": \"{{device_host}}\"},\n    {\"host\": \"{{device_host_2}}\"},\n    {\"host\": \"{{device_host_3}}\"}\n  ],\n  \"command\": [\n    \"show version\",\n    \"show ip interface brief\",\n    \"show vlan brief\"\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/bulk",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"bulk"
+									]
+								},
+								"description": "演示驱动无关性：在单次批量请求中混合使用 netmiko, napalm, pyeapi 驱动操作不同资产。"
+							},
+							"response": []
+						},
+						{
+							"name": "Cisco设备批量查询",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"cisco_ios\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 60\n  },\n  \"devices\": [\n    {\"host\": \"{{device_host}}\"},\n    {\"host\": \"{{device_host_2}}\"},\n    {\"host\": \"{{device_host_3}}\"}\n  ],\n  \"command\": [\n    \"show version\",\n    \"show ip interface brief\",\n    \"show vlan brief\"\n  ],\n  \"driver_args\": {\n    \"read_timeout\": 45,\n    \"delay_factor\": 1.5,\n    \"strip_prompt\": true,\n    \"normalize\": true\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/bulk",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"bulk"
+									]
+								},
+								"description": "同厂商设备批量信息收集 - Cisco iOS设备"
+							},
+							"response": []
+						},
+						{
+							"name": "Arista设备批量查询",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"pyeapi\",\n  \"connection_args\": {\n    \"host\": \"localhost\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"transport\": \"https\",\n    \"port\": 443\n  },\n  \"devices\": [\n    {\n      \"host\": \"{{device_host}}\"\n    },\n    {\n      \"host\": \"{{device_host_2}}\"\n    },\n    {\n      \"host\": \"{{device_host_3}}\"\n    }\n  ],\n  \"command\": [\n    \"show version\",\n    \"show interfaces status\",\n    \"show vlan brief\"\n  ],\n  \"driver_args\": {\n    \"encoding\": \"json\",\n    \"format\": \"json\"\n  },\n  \"queue_strategy\": \"fifo\",\n  \"ttl\": 600\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/bulk",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"bulk"
+									]
+								},
+								"description": "Arista设备批量JSON查询 - 结构化数据收集"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Heterogeneous Bulk Operations",
+					"item": [
+						{
+							"name": "多厂商设备信息收集",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 60\n  },\n  \"devices\": [\n    {\n      \"host\": \"{{device_host}}\",\n      \"device_type\": \"cisco_ios\",\n      \"site\": \"HQ\",\n      \"role\": \"core\"\n    },\n    {\n      \"host\": \"{{device_host_2}}\",\n      \"device_type\": \"cisco_nxos\",\n      \"site\": \"Branch1\",\n      \"role\": \"access\"\n    },\n    {\n      \"host\": \"{{device_host_3}}\",\n      \"device_type\": \"juniper_junos\",\n      \"site\": \"Branch2\",\n      \"role\": \"edge\"\n    }\n  ],\n  \"command\": \"show version\",\n  \"driver_args\": {\n    \"read_timeout\": 45,\n    \"strip_prompt\": true,\n    \"normalize\": true\n  },\n  \"ttl\": 600,\n  \"webhook\": {\n    \"url\": \"https://inventory.company.com/device-discovery\",\n    \"method\": \"POST\",\n    \"headers\": {\n      \"Authorization\": \"Bearer {{inventory_token}}\"\n    }\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/bulk",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"bulk"
+									]
+								},
+								"description": "多厂商设备信息收集 - 自动设备发现和清单管理"
+							},
+							"response": []
+						},
+						{
+							"name": "混合驱动标准化配置",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"secret\": \"{{enable_password}}\"\n  },\n  \"devices\": [\n    {\n      \"host\": \"{{device_host}}\",\n      \"device_type\": \"cisco_ios\",\n      \"timezone\": \"EST\",\n      \"ntp_server\": \"8.8.8.8\"\n    },\n    {\n      \"host\": \"{{device_host_2}}\",\n      \"device_type\": \"cisco_nxos\",\n      \"timezone\": \"EST\",\n      \"ntp_server\": \"8.8.4.4\"\n    },\n    {\n      \"host\": \"{{device_host_3}}\",\n      \"device_type\": \"arista_eos\",\n      \"timezone\": \"EST\",\n      \"ntp_server\": \"pool.ntp.org\"\n    }\n  ],\n  \"config\": {\n    \"timezone\": \"{{ timezone }}\",\n    \"ntp_server\": \"{{ ntp_server }}\",\n    \"domain_name\": \"company.local\"\n  },\n  \"driver_args\": {\n    \"exit_config_mode\": true,\n    \"enter_config_mode\": true,\n    \"cmd_verify\": true\n  },\n  \"rendering\": {\n    \"template\": \"{% if 'ios' in ansible_network_os %}clock timezone {{ timezone }} -5{% elif 'nxos' in ansible_network_os %}clock timezone {{ timezone }} -5 0{% elif 'eos' in ansible_network_os %}clock timezone {{ timezone }}{% endif %}\\nntp server {{ ntp_server }}\\nip domain-name {{ domain_name }}\"\n  },\n  \"ttl\": 900\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/bulk",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"bulk"
+									]
+								},
+								"description": "混合厂商标准化配置 - 智能模板适配不同设备类型"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "大规模批量操作",
+					"item": [
+						{
+							"name": "网络健康检查 - 50台设备",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"cisco_ios\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 30,\n    \"keepalive\": 60\n  },\n  \"devices\": [\n    {\n      \"host\": \"192.168.1.1\",\n      \"site\": \"HQ\"\n    },\n    {\n      \"host\": \"192.168.1.2\",\n      \"site\": \"HQ\"\n    },\n    {\n      \"host\": \"192.168.2.1\",\n      \"site\": \"Branch1\"\n    },\n    {\n      \"host\": \"192.168.2.2\",\n      \"site\": \"Branch1\"\n    },\n    {\n      \"host\": \"192.168.3.1\",\n      \"site\": \"Branch2\"\n    }\n  ],\n  \"command\": [\n    \"show processes cpu | include five\",\n    \"show memory statistics | include Processor\",\n    \"show interface status | include connected\",\n    \"show logging | include ERROR\"\n  ],\n  \"driver_args\": {\n    \"read_timeout\": 30,\n    \"delay_factor\": 1,\n    \"strip_prompt\": true,\n    \"normalize\": true\n  },\n  \"parsing\": {\n    \"name\": \"textfsm\",\n    \"template\": \"health_check_template.textfsm\"\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 1800,\n  \"webhook\": {\n    \"url\": \"https://monitoring.company.com/health-report\",\n    \"method\": \"POST\",\n    \"headers\": {\n      \"Authorization\": \"Bearer {{monitoring_token}}\",\n      \"Content-Type\": \"application/json\"\n    },\n    \"timeout\": 60\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/bulk",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"bulk"
+									]
+								},
+								"description": "大规模网络健康检查 - 自动监控和报告"
+							},
+							"response": []
+						},
+						{
+							"name": "安全合规扫描 - 企业级",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 90\n  },\n  \"devices\": [\n    {\n      \"host\": \"192.168.1.1\",\n      \"device_type\": \"cisco_ios\",\n      \"criticality\": \"high\"\n    },\n    {\n      \"host\": \"192.168.1.2\",\n      \"device_type\": \"cisco_nxos\",\n      \"criticality\": \"medium\"\n    },\n    {\n      \"host\": \"192.168.1.3\",\n      \"device_type\": \"juniper_junos\",\n      \"criticality\": \"high\"\n    }\n  ],\n  \"command\": [\n    \"show running-config | include aaa|login|enable|service|ssh\",\n    \"show users\",\n    \"show access-lists\",\n    \"show crypto key mypubkey rsa\",\n    \"show ip ssh\"\n  ],\n  \"driver_args\": {\n    \"read_timeout\": 120,\n    \"delay_factor\": 2,\n    \"strip_prompt\": true,\n    \"strip_command\": true,\n    \"normalize\": true\n  },\n  \"parsing\": {\n    \"name\": \"textfsm\",\n    \"template\": \"security_audit_template.textfsm\"\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 3600,\n  \"webhook\": {\n    \"url\": \"https://security.company.com/compliance-scan\",\n    \"method\": \"POST\",\n    \"headers\": {\n      \"Authorization\": \"Bearer {{security_token}}\",\n      \"X-Scan-Type\": \"network-compliance\",\n      \"Content-Type\": \"application/json\"\n    },\n    \"timeout\": 30\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/bulk",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"bulk"
+									]
+								},
+								"description": "企业级安全合规扫描 - 自动安全评估和报告"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Template Operations",
+			"item": [
+				{
+					"name": "Jinja2 渲染示例",
+					"item": [
+						{
+							"name": "Jinja2 模板渲染查询",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"command\": \"echo \\\"Current server time is {{ current_time }}\\\"\",\n  \"queue_strategy\": \"fifo\",\n  \"rendering\": {\n    \"context\": {\n      \"current_time\": \"2026-02-17 15:30:00\"\n    }\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "Paramiko Jinja2 模板渲染示例"
+							},
+							"response": []
+						},
+						{
+							"name": "全局 Jinja2 模板渲染",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"paramiko\",\n  \"connection_args\": {\n    \"host\": \"{{server_host}}\",\n    \"username\": \"{{server_username}}\",\n    \"password\": \"{{server_password}}\"\n  },\n  \"command\": \"echo \\\"Hello {{ name }}\\\"\",\n  \"rendering\": {\n    \"context\": {\n      \"name\": \"Linux-Net\"\n    }\n  },\n  \"queue_strategy\": \"fifo\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "全局 Jinja2 渲染示例"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "模板渲染 (Rendering)",
+					"item": [
+						{
+							"name": "Jinja2 - 基础渲染",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"jinja2\",\n  \"template\": \"interface {{ interface }}\\n description {{ description }}\\n switchport mode access\\n switchport access vlan {{ vlan }}\",\n  \"context\": {\n    \"interface\": \"GigabitEthernet0/1\",\n    \"description\": \"服务器连接端口\",\n    \"vlan\": 100\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/template/render",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"template",
+										"render"
+									]
+								},
+								"description": "Jinja2基础模板渲染"
+							},
+							"response": []
+						},
+						{
+							"name": "Jinja2 - 复杂循环模板",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"jinja2\",\n  \"template\": \"{% for vlan in vlans %}\\nvlan {{ vlan.id }}\\n name {{ vlan.name }}\\n{% endfor %}\\n\\n{% for intf in interfaces %}\\ninterface {{ intf.name }}\\n description {{ intf.description }}\\n switchport access vlan {{ intf.vlan }}\\n no shutdown\\n{% endfor %}\",\n  \"context\": {\n    \"vlans\": [\n      {\"id\": 100, \"name\": \"DATA\"},\n      {\"id\": 200, \"name\": \"VOICE\"},\n      {\"id\": 300, \"name\": \"GUEST\"}\n    ],\n    \"interfaces\": [\n      {\"name\": \"GigabitEthernet0/1\", \"description\": \"用户端口1\", \"vlan\": 100},\n      {\"name\": \"GigabitEthernet0/2\", \"description\": \"IP电话端口\", \"vlan\": 200},\n      {\"name\": \"GigabitEthernet0/3\", \"description\": \"访客端口\", \"vlan\": 300}\n    ]\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/template/render",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"template",
+										"render"
+									]
+								},
+								"description": "Jinja2复杂循环模板 - 批量VLAN和接口配置"
+							},
+							"response": []
+						},
+						{
+							"name": "Jinja2 - 路径参数方式",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"template\": \"router bgp {{ asn }}\\n neighbor {{ neighbor.ip }} remote-as {{ neighbor.asn }}\\n neighbor {{ neighbor.ip }} description {{ neighbor.description }}\",\n  \"context\": {\n    \"asn\": 65001,\n    \"neighbor\": {\n      \"ip\": \"10.1.1.2\",\n      \"asn\": 65002,\n      \"description\": \"外部BGP邻居\"\n    }\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/template/render/jinja2",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"template",
+										"render",
+										"jinja2"
+									]
+								},
+								"description": "通过路径参数指定模板类型"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "模板解析 (Parsing)",
+					"item": [
+						{
+							"name": "查询 - 带TextFSM解析",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\"\n  },\n  \"command\": \"show ip interface brief\",\n  \"driver_args\": {\n    \"read_timeout\": 30,\n    \"strip_prompt\": true,\n    \"strip_command\": true,\n    \"normalize\": true\n  },\n  \"parsing\": {\n    \"name\": \"textfsm\",\n    \"template\": \"cisco_ios_show_ip_interface_brief.textfsm\"\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 300\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/device/exec",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"device",
+										"exec"
+									]
+								},
+								"description": "带TextFSM解析的查询 - 结构化输出"
+							},
+							"response": []
+						},
+						{
+							"name": "TextFSM - 接口状态解析",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"textfsm\",\n  \"template\": \"Value INTERFACE (\\\\S+)\\nValue IP ([\\\\d\\\\.]+)\\nValue STATUS (up|down|administratively down)\\n\\nStart\\n  ^${INTERFACE}\\\\s+${IP}\\\\s+\\\\w+\\\\s+\\\\w+\\\\s+${STATUS} -> Record\",\n  \"context\": \"GigabitEthernet0/1    192.168.1.1     YES manual up                    up\\nGigabitEthernet0/2    192.168.1.2     YES manual down                  down\\nGigabitEthernet0/3    unassigned      YES unset  administratively down down\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/template/parse",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"template",
+										"parse"
+									]
+								},
+								"description": "TextFSM解析接口状态信息"
+							},
+							"response": []
+						},
+						{
+							"name": "TextFSM - 路由表解析",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"textfsm\",\n  \"template\": \"Value NETWORK ([\\\\d\\\\.]+/\\\\d+)\\nValue NEXTHOP ([\\\\d\\\\.]+)\\nValue INTERFACE (\\\\S+)\\nValue PROTOCOL (\\\\w+)\\n\\nStart\\n  ^${PROTOCOL}\\\\s+${NETWORK}\\\\s+\\\\[\\\\d+/\\\\d+\\\\]\\\\s+via\\\\s+${NEXTHOP},\\\\s+\\\\S+,\\\\s+${INTERFACE} -> Record\",\n  \"context\": \"O        10.1.1.0/24 [110/2] via 192.168.1.1, 00:05:00, GigabitEthernet0/1\\nO        10.2.2.0/24 [110/3] via 192.168.1.2, 00:03:00, GigabitEthernet0/2\\nC        192.168.1.0/24 is directly connected, GigabitEthernet0/0\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/template/parse",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"template",
+										"parse"
+									]
+								},
+								"description": "TextFSM解析路由表信息"
+							},
+							"response": []
+						},
+						{
+							"name": "TTP - 配置解析",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"ttp\",\n  \"template\": \"<group name=\\\"interfaces\\\">\\ninterface {{ interface }}\\n description {{ description }}\\n ip address {{ ip }} {{ mask }}\\n</group>\",\n  \"context\": \"interface GigabitEthernet0/1\\n description 服务器连接\\n ip address 192.168.1.1 255.255.255.0\\n!\\ninterface GigabitEthernet0/2\\n description 上行链路\\n ip address 10.1.1.1 255.255.255.252\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/template/parse",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"template",
+										"parse"
+									]
+								},
+								"description": "TTP解析设备配置信息"
+							},
+							"response": []
+						},
+						{
+							"name": "TextFSM - 路径参数方式",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"template\": \"Value INTERFACE (\\\\S+)\\nValue IP ([\\\\d\\\\.]+)\\nValue STATUS (up|down|administratively down)\\n\\nStart\\n  ^${INTERFACE}\\\\s+${IP}\\\\s+\\\\w+\\\\s+\\\\w+\\\\s+${STATUS} -> Record\",\n  \"context\": \"GigabitEthernet0/1    192.168.1.1     YES manual up                    up\\nGigabitEthernet0/2    192.168.1.2     YES manual down                  down\\nGigabitEthernet0/3    unassigned      YES unset  administratively down down\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/template/parse/textfsm",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"template",
+										"parse",
+										"textfsm"
+									]
+								},
+								"description": "通过路径参数指定解析器类型"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Complex Functional Combinations",
+			"item": [
+				{
+					"name": "Full Execution + Full Webhook (Netmiko)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 120\n  },\n  \"command\": [\n    \"show version\",\n    \"show inventory\",\n    \"show interfaces\",\n    \"show ip interface brief\",\n    \"show vlan brief\",\n    \"show running-config | include hostname|ntp|logging|snmp\",\n    \"show users\",\n    \"show processes cpu\",\n    \"show memory statistics\"\n  ],\n  \"webhook\": {\n    \"url\": \"http://audit-system.company.com/webhook\",\n    \"method\": \"POST\",\n    \"headers\": {\n      \"Authorization\": \"Bearer audit-token\",\n      \"Content-Type\": \"application/json\"\n    }\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 600\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/exec",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"exec"
+							]
+						},
+						"description": "展示全量参数执行：长命令列表、多层级 Webhook 回调（带 Headers）、Pinned 队列、TTL 控制。"
+					},
+					"response": []
+				},
+				{
+					"name": "Execution + Inline Parsing (TextFSM)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"host\": \"{{device_host}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\"\n  },\n  \"command\": \"show running-config | include aaa|login|enable|service|no service|logging|ntp|snmp\",\n  \"parsing\": {\n    \"name\": \"textfsm\",\n    \"template\": \"Value List AAA_COMMANDS (.+aaa.*)\\nValue List LOGIN_COMMANDS (.+login.*)\\nValue List SERVICE_COMMANDS (.+service.*)\\nValue List LOGGING_COMMANDS (.+logging.*)\\n\\nStart\\n  ^(aaa.*)$$ -> Record.AAA_COMMANDS\\n  ^(.*login.*)$$ -> Record.LOGIN_COMMANDS\\n  ^(.*service.*)$$ -> Record.SERVICE_COMMANDS\\n  ^(logging.*)$$ -> Record.LOGGING_COMMANDS\"\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 300\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/exec",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"exec"
+							]
+						},
+						"description": "展示执行与解析联动：由驱动执行获取原始输出，随后通过内联 TextFSM 模板转换为结构化数据。"
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk + Rendering + Pinned Queue",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"driver\": \"netmiko\",\n  \"connection_args\": {\n    \"device_type\": \"{{device_type}}\",\n    \"username\": \"{{device_username}}\",\n    \"password\": \"{{device_password}}\",\n    \"timeout\": 90\n  },\n  \"devices\": [\n    {\n      \"host\": \"{{device_host}}\",\n      \"site\": \"HQ\"\n    },\n    {\n      \"host\": \"{{device_host_2}}\",\n      \"site\": \"Branch1\"\n    },\n    {\n      \"host\": \"{{device_host_3}}\",\n      \"site\": \"Branch2\"\n    }\n  ],\n  \"config\": {\n    \"site\": \"{{ site }}\",\n    \"ntp_servers\": [\n      \"8.8.8.8\",\n      \"8.8.4.4\"\n    ],\n    \"logging_server\": \"192.168.1.100\",\n    \"snmp_community\": \"company_ro\",\n    \"domain_name\": \"company.com\"\n  },\n  \"rendering\": {\n    \"template\": \"!\\n! 标准化配置 - {{ site }}站点\\n!\\nip domain-name {{ domain_name }}\\n{% for server in ntp_servers %}\\nntp server {{ server }}\\n{% endfor %}\\nlogging host {{ logging_server }}\\nsnmp-server community {{ snmp_community }} RO\\nsnmp-server location {{ site }}\\nsnmp-server contact netadmin@{{ domain_name }}\\nbanner motd ^\\n警告: 仅授权用户可访问此设备\\n所有活动均被监控和记录\\n^\\n!\"\n  },\n  \"queue_strategy\": \"pinned\",\n  \"ttl\": 600\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/device/bulk",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"device",
+								"bulk"
+							]
+						},
+						"description": "展示混合高级参数：批量设备请求、Jinja2 模板渲染（变量上下文注入）、Pinned 队列持久连接。"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"auth": {
+		"type": "apikey",
+		"apikey": [
+			{
+				"key": "key",
+				"value": "X-API-Key",
+				"type": "string"
+			},
+			{
+				"key": "value",
+				"value": "{{api_key}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"var jsonData = pm.response.json();",
+					"if (jsonData) {",
+					"    var targetId = null;",
+					"    if (jsonData.id) {",
+					"        targetId = jsonData.id;",
+					"    } else if (jsonData.succeeded && jsonData.succeeded.length > 0) {",
+					"        targetId = jsonData.succeeded[0].id;",
+					"    }",
+					"    ",
+					"    if (targetId) {",
+					"        pm.collectionVariables.set('job_id', targetId);",
+					"        console.log('任务ID已自动捕获: ' + targetId);",
+					"        ",
+					"        // 仅在使用 Postman Runner 时自动跳转到查询接口",
+					"        if (pm.info.requestName !== \"按ID查询任务\") {",
+					"            postman.setNextRequest(\"按ID查询任务\");",
+					"        }",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:9000"
+		},
+		{
+			"key": "api_key",
+			"value": "your-api-key-here"
+		},
+		{
+			"key": "device_host",
+			"value": "192.168.1.1"
+		},
+		{
+			"key": "device_username",
+			"value": "admin"
+		},
+		{
+			"key": "device_password",
+			"value": "admin"
+		},
+		{
+			"key": "device_type",
+			"value": "cisco_ios"
+		},
+		{
+			"key": "enable_password",
+			"value": "enable_pass"
+		},
+		{
+			"key": "server_host",
+			"value": "10.1.1.5"
+		},
+		{
+			"key": "server_username",
+			"value": "root"
+		},
+		{
+			"key": "server_password",
+			"value": "your_server_password"
+		},
+		{
+			"key": "job_id",
+			"value": ""
+		},
+		{
+			"key": "sudo_password",
+			"value": "your_sudo_password"
+		},
+		{
+			"key": "device_cred_ref",
+			"value": "linux_net/cisco"
+		},
+		{
+			"key": "server_cred_ref",
+			"value": "linux_net/linux"
+		},
+		{
+			"key": "proxy_host",
+			"value": "10.1.1.200"
+		},
+		{
+			"key": "proxy_username",
+			"value": "jumpuser"
+		},
+		{
+			"key": "proxy_password",
+			"value": "jumppass"
+		}
+	]
+}

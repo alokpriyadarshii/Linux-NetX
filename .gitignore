@@ -1,0 +1,52 @@
+# Editor and AI integration
+.DS_Store
+.vscode/
+.cursor/
+.cursorrules
+.claude/
+.devcontainer/
+.idea/
+.ruff_cache/
+.pytest_cache/
+.env
+
+venv/
+.venv/
+build/
+dist/
+__pycache__/
+*.pyc
+*.egg-info/
+*.egg
+*.whl
+*.coverage*
+prd/
+
+
+redis/tls
+redis/data
+
+# Kubernetes deployment files (with real credentials, auto-generated)
+deploy/k8s/00-secrets-deploy.yaml
+# deploy/k8s/06-linux_net-core.yaml  # NOT ignored: safe to commit (no real credentials)
+
+# Helm dependency packages (fetched via `helm dependency update`, no need to commit)
+deploy/charts/*/charts/
+# Chart.lock is intentionally NOT ignored: commit it to pin dependency versions (like package-lock.json)
+
+*.pid
+*.lock
+drafts/
+site/
+docs-local/
+site*
+# Containerlab labs
+tests/clab/clab-linux_net-e2e/
+
+
+# Vault 
+vault/data/
+vault/logs/
+# Ignore these files even if they are generated elsewhere.
+*.token
+*.key

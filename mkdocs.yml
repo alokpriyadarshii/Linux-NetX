@@ -1,0 +1,137 @@
+site_name: Linux-Net Documentation
+site_description: Linux-Net distributed network device management API server
+site_author: Alok Priyadarshi
+site_url: https://linux-net.readthedocs.io/
+
+use_directory_urls: false
+
+# Docs directory
+docs_dir: docs
+
+# Repository
+repo_name: alokpriyadarshii/Linux-Net
+repo_url: https://github.com/alokpriyadarshii/Linux-Net
+
+# Copyright
+copyright: Copyright &copy; 2025 Alok Priyadarshi
+
+# Theme
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - navigation.footer
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.prune
+  
+  toc:
+    depth: 2
+  
+  # Custom styles
+  custom_dir: docs/overrides
+  palette:
+    - media: "(prefers-color-scheme)"
+      scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Follow system settings
+  logo: assets/images/logo.svg
+  favicon: assets/images/favicon.ico
+
+# Plugins
+plugins:
+  - search
+
+# Markdown extensions
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - tables
+  - attr_list
+  - admonition
+  - pymdownx.details
+  - pymdownx.emoji
+  - pymdownx.tabbed
+  - pymdownx.tasklist
+  - pymdownx.caret
+  - pymdownx.smartsymbols
+  - pymdownx.arithmatex:
+      generic: true
+  
+  # Only display 2 levels in the table of contents
+  - toc:
+      permalink: true
+      baselevel: 1
+      toc_depth: 2
+
+# Navigation
+nav:
+  - Home: en/index.md
+  - Getting Started:
+      - Quick Start: en/getting-started/quick-start.md
+      - Basic Concepts: en/getting-started/basic-concepts.md
+      - Deployment Guide: en/getting-started/deployment-guide.md
+      - Postman Guide: en/getting-started/postman-guide.md
+  - API Reference:
+      - API Overview: en/api/api-overview.md
+      - Device Operation API: en/api/device-api.md
+      - Template Operation API: en/api/template-api.md
+      - Job Management API: en/api/job-api.md
+      - API Examples: en/api/api-examples.md
+      - API Best Practices: en/api/api-best-practices.md
+  - Driver Usage:
+      - Driver Selection: en/drivers/index.md
+      - Netmiko Driver: en/drivers/netmiko.md
+      - NAPALM Driver: en/drivers/napalm.md
+      - PyEAPI Driver: en/drivers/pyeapi.md
+      - Paramiko Driver: en/drivers/paramiko.md
+  - Technical Architecture:
+      - Architecture Overview: en/architecture/architecture-overview.md
+      - Plugin System: en/architecture/plugin-system.md
+      - Driver System: en/architecture/driver-system.md
+      - Template System: en/architecture/template-system.md
+      - Scheduler System: en/architecture/scheduler-system.md
+      - Webhook System: en/architecture/webhook-system.md
+  - Reference Manual:
+      - Configuration Guide: en/reference/configuration-guide.md
+      - Environment Variables: en/reference/environment-variables.md
+      - Credential Guide: en/reference/credential-guide.md
+      - Error Codes: en/reference/error-codes.md
+      - Troubleshooting: en/reference/troubleshooting.md
+      - Development Guide: en/reference/development-guide.md
+
+
+extra:
+  analytics:
+    provider: google
+    property: !ENV GOOGLE_ANALYTICS_KEY

@@ -1,0 +1,19 @@
+# 04-nodeport/nodeport.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: linux-net-nodeport
+  namespace: linux-net
+  labels:
+    app: linux-net
+spec:
+  type: NodePort
+  ports:
+  - port: 9000
+    targetPort: 9000
+    nodePort: 30090
+    protocol: TCP
+    name: http
+  selector:
+    app: linux-net
+    component: controller

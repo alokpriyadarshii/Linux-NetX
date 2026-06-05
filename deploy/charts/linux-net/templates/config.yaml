@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "linux-net.fullname" . }}-config
+data:
+  LINUX_NET_LOG__LEVEL: {{ .Values.config.logLevel | quote }}
+  LINUX_NET_WORKER__PINNED_PER_NODE: {{ .Values.config.pinnedPerNode | quote }}
+  LINUX_NET_REDIS__HOST: {{ .Values.config.redis.host | quote }}
+  LINUX_NET_REDIS__PORT: {{ .Values.config.redis.port | quote }}
+  LINUX_NET_REDIS__TLS__ENABLED: {{ .Values.config.redis.tls | quote }}
+  LINUX_NET_CREDENTIAL__ENABLED: "true"
+  LINUX_NET_CREDENTIAL__NAME: {{ .Values.config.vault.name | quote }}
+  LINUX_NET_CREDENTIAL__ADDR: {{ .Values.config.vault.addr | quote }}
+  LINUX_NET_CREDENTIAL__ALLOWED_PATHS: {{ .Values.config.vault.allowedPaths | quote }}
+  LINUX_NET_CREDENTIAL__VERIFY: {{ .Values.config.vault.verify | quote }}
+  LINUX_NET_CREDENTIAL__CACHE_TTL: {{ .Values.config.vault.cacheTtl | quote }}
+  LINUX_NET_STORAGE__RETENTION_HOURS: {{ .Values.config.storage.retentionHours | quote }}
+  LINUX_NET_STORAGE__STAGING: {{ .Values.config.storage.staging | quote }}
+  LINUX_NET_MONGODB__ENABLED: {{ .Values.config.mongodb.enabled | quote }}
+  LINUX_NET_MONGODB__URI: {{ .Values.config.mongodb.uri | quote }}
+  LINUX_NET_MONGODB__DATABASE: {{ .Values.config.mongodb.database | quote }}
+  LINUX_NET_MONGODB__COLLECTION: {{ .Values.config.mongodb.collection | quote }}
+  LINUX_NET_MONGODB__DETACHED_COLLECTION: {{ .Values.config.mongodb.detachedCollection | quote }}
+  LINUX_NET_MONGODB__RETENTION_DAYS: {{ .Values.config.mongodb.retentionDays | quote }}
+  LINUX_NET_MONGODB__DETACHED_RETENTION_DAYS: {{ .Values.config.mongodb.detachedRetentionDays | quote }}
+  LINUX_NET_MONGODB__MAX_DOCUMENTS: {{ .Values.config.mongodb.maxDocuments | quote }}
+  PYTHONUNBUFFERED: "1"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "linux-net.fullname" . }}-secrets
+type: Opaque
+stringData:
+  password: {{ .Values.secrets.redisPassword | quote }}
+  api-key: {{ .Values.secrets.apiKey | quote }}
+  vault-token: {{ .Values.secrets.vaultToken | quote }}

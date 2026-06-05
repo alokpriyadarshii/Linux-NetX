@@ -1,0 +1,439 @@
+from importlib import import_module
+from typing import Iterable
+
+import pytest
+from fastapi.testclient import TestClient
+
+from linux_net import controller
+from linux_net.models import BatchFailedItem
+from linux_net.models.request import (
+    BulkExecutionRequest,
+    ExecutionRequest,
+    TemplateParseRequest,
+    TemplateRenderRequest,
+)
+from linux_net.models.response import JobInResponse, WorkerInResponse
+
+device_module = import_module("linux_net.routes.device")
+template_module = import_module("linux_net.routes.template")
+manage_module = import_module("linux_net.routes.manage")
+
+
+pytestmark = [pytest.mark.api]
+
+
+class _StubDriver:
+    driver_name: str = "netmiko"
+
+    @classmethod
+    def validate(cls, req: ExecutionRequest | BulkExecutionRequest) -> None:
+        return None
+
+
+class _StubManager:
+    def execute_on_device(self, req: ExecutionRequest) -> JobInResponse:
+        return JobInResponse(id="job1", status="queued", queue="q1")
+
+    def execute_on_bulk_devices(
+        self, reqs: Iterable[ExecutionRequest]
+    ) -> tuple[list[JobInResponse], list[BatchFailedItem]]:
+        job = JobInResponse(id="job-bulk", status="queued", queue="q1")
+        return [job], [BatchFailedItem(host="failed-host", reason="test-reason")]
+
+
+class _StubRenderer:
+    @classmethod
+    def from_rendering_request(cls, req: TemplateRenderRequest) -> "_StubRenderer":
+        return cls()
+
+    def render(self, context: dict | None) -> str:
+        return "rendered"
+
+
+class _StubParser:
+    @classmethod
+    def from_parsing_request(cls, req: TemplateParseRequest) -> "_StubParser":
+        return cls()
+
+    def parse(self, context: str | None) -> dict:
+        return {"parsed": True}
+
+
+def _client_with_stubs(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    import importlib
+
+    importlib.reload(controller)
+    monkeypatch.setattr(device_module, "drivers", {"netmiko": _StubDriver})
+    monkeypatch.setattr(device_module, "g_mgr", _StubManager())
+    monkeypatch.setattr(template_module, "renderers", {"stub": _StubRenderer})
+    monkeypatch.setattr(template_module, "parsers", {"stub": _StubParser})
+    return TestClient(controller.app)
+
+
+class _ManageStub:
+    def __init__(self):
+        self.calls: dict[str, object] = {}
+
+    def get_job_list_by_ids(self, ids: list[str]):
+        self.calls["get_job_list_by_ids"] = ids
+        return [JobInResponse(id=ids[0], status="queued", queue="q1")]
+
+    def get_job_list(self, q_name=None, status=None, limit=None):
+        self.calls["get_job_list"] = (q_name, status, limit)
+        return [JobInResponse(id="job-list", status=status or "queued", queue=q_name or "q1")]
+
+    def cancel_job(self, id=None, q_name=None):
+        self.calls["cancel_job"] = (id, q_name)
+        return [id] if id else ["c1"]
+
+    def get_worker_list(self, q_name=None):
+        self.calls["get_worker_list"] = q_name
+        return [
+            WorkerInResponse(
+                name="w1",
+                status="busy",
+                queues=[q_name] if q_name else None,
+            )
+        ]
+
+    def kill_worker(self, name=None, q_name=None):
+        self.calls["kill_worker"] = (name, q_name)
+        if name:
+            return [name]
+        if q_name:
+            return [f"{q_name}-w"]
+        return []
+
+
+def _client_with_manage_stub(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, _ManageStub]:
+    stub = _ManageStub()
+    monkeypatch.setattr(manage_module, "g_mgr", stub)
+    return TestClient(controller.app), stub
+
+
+def test_device_exec_missing_host(monkeypatch, app_config):
+    """POST /device/exec should 400 when required host missing."""
+    client = _client_with_stubs(monkeypatch)
+    payload = {"driver": "netmiko", "connection_args": {}, "command": "show version"}
+    resp = client.post(
+        "/device/exec", json=payload, headers={"X-API-KEY": app_config.server.api_key}
+    )
+    assert resp.status_code == 400
+    assert "detail" in resp.json()
+
+
+def test_device_exec_success(monkeypatch, app_config):
+    """POST /device/exec should enqueue job and return 201."""
+    client = _client_with_stubs(monkeypatch)
+    payload = {
+        "driver": "netmiko",
+        "connection_args": {"host": "1.1.1.1"},
+        "command": "show version",
+    }
+    resp = client.post(
+        "/device/exec", json=payload, headers={"X-API-KEY": app_config.server.api_key}
+    )
+    assert resp.status_code == 201
+    assert resp.json()["id"] == "job1"
+
+
+def test_device_bulk_returns_success_when_no_devices(monkeypatch, app_config):
+    """POST /device/bulk returns success with empty devices list."""
+    client = _client_with_stubs(monkeypatch)
+    payload = {
+        "driver": "netmiko",
+        "connection_args": {"host": "1.1.1.1"},
+        "command": "show version",
+        "devices": [],
+    }
+    resp = client.post(
+        "/device/bulk",
+        json=payload,
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["succeeded"] == []
+    assert body["failed"] == []
+
+
+def test_device_bulk_returns_failures(monkeypatch, app_config):
+    """POST /device/bulk returns failures with reasons."""
+    client = _client_with_stubs(monkeypatch)
+    payload = {
+        "driver": "netmiko",
+        "connection_args": {"host": "1.1.1.1"},
+        "command": "show version",
+        "devices": [{"host": "10.0.0.1"}],
+    }
+
+    # Mock manager to return a failure
+    class FailureManager(_StubManager):
+        def execute_on_bulk_devices(self, reqs):
+            return [], [BatchFailedItem(host="10.0.0.1", reason="No capacity")]
+
+    monkeypatch.setattr(device_module, "g_mgr", FailureManager())
+
+    resp = client.post(
+        "/device/bulk",
+        json=payload,
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert len(body["failed"]) == 1
+    assert body["failed"][0]["host"] == "10.0.0.1"
+    assert body["failed"][0]["reason"] == "No capacity"
+
+
+def test_device_bulk_expands_devices(monkeypatch, app_config):
+    """POST /device/bulk should expand devices and merge connection args per-device."""
+    calls: dict[str, object] = {}
+
+    class CaptureManager:
+        def execute_on_bulk_devices(self, reqs: Iterable[ExecutionRequest]):
+            calls["reqs"] = list(reqs)
+            jobs = [
+                JobInResponse(id=f"job-{req.connection_args.host}", status="queued", queue="q1")
+                for req in calls["reqs"]
+            ]
+            return jobs, []
+
+    class ValidatingDriver(_StubDriver):
+        called = 0
+
+        @classmethod
+        def validate(cls, req: ExecutionRequest | BulkExecutionRequest) -> None:
+            cls.called += 1
+            return None
+
+    monkeypatch.setattr(device_module, "drivers", {"netmiko": ValidatingDriver})
+    monkeypatch.setattr(device_module, "g_mgr", CaptureManager())
+    monkeypatch.setattr(template_module, "renderers", {"stub": _StubRenderer})
+    monkeypatch.setattr(template_module, "parsers", {"stub": _StubParser})
+    client = TestClient(controller.app)
+
+    payload = {
+        "driver": "netmiko",
+        "connection_args": {"host": "base-host", "username": "base-user"},
+        "command": "show clock",
+        "devices": [{"host": "10.0.0.1"}, {"host": "10.0.0.2", "username": "override"}],
+    }
+    resp = client.post(
+        "/device/bulk",
+        json=payload,
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+
+    assert resp.status_code == 201
+    reqs = calls["reqs"]
+    assert len(reqs) == 2  # type: ignore
+    assert reqs[0].connection_args.host == "10.0.0.1"  # type: ignore
+    assert reqs[0].connection_args.username == "base-user"  # type: ignore
+    assert reqs[1].connection_args.host == "10.0.0.2"  # type: ignore
+    assert reqs[1].connection_args.username == "override"  # type: ignore
+    assert all(req.command == "show clock" for req in reqs)  # type: ignore
+    assert ValidatingDriver.called == 1
+
+
+def test_device_bulk_per_device_command_override(monkeypatch, app_config):
+    """POST /device/bulk should allow per-device command/config override."""
+    calls: dict[str, object] = {}
+
+    class CaptureManager:
+        def execute_on_bulk_devices(self, reqs: Iterable[ExecutionRequest]):
+            calls["reqs"] = list(reqs)
+            jobs = [
+                JobInResponse(id=f"job-{req.connection_args.host}", status="queued", queue="q1")
+                for req in calls["reqs"]
+            ]
+            return jobs, []
+
+    monkeypatch.setattr(device_module, "drivers", {"netmiko": _StubDriver})
+    monkeypatch.setattr(device_module, "g_mgr", CaptureManager())
+    client = TestClient(controller.app)
+
+    # Test 1: Device-level command override
+    payload = {
+        "driver": "netmiko",
+        "connection_args": {"username": "admin", "password": "admin"},
+        "command": "show version",  # Base command
+        "devices": [
+            {"host": "10.0.0.1"},  # Uses base command
+            {"host": "10.0.0.2", "command": "show interfaces"},  # Override command
+            {"host": "10.0.0.3", "command": "display version"},  # Override command
+        ],
+    }
+    resp = client.post(
+        "/device/bulk",
+        json=payload,
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+
+    assert resp.status_code == 201
+    reqs = calls["reqs"]
+    assert len(reqs) == 3  # type: ignore
+    assert reqs[0].command == "show version"  # type: ignore
+    assert reqs[0].config is None  # type: ignore
+    assert reqs[1].command == "show interfaces"  # type: ignore
+    assert reqs[1].config is None  # type: ignore
+    assert reqs[2].command == "display version"  # type: ignore
+    assert reqs[2].config is None  # type: ignore
+
+    # Test 2: Device-level config override
+    payload = {
+        "driver": "netmiko",
+        "connection_args": {"username": "admin", "password": "admin"},
+        "config": "hostname base-router",  # Base config
+        "devices": [
+            {"host": "10.0.0.1"},  # Uses base config
+            {"host": "10.0.0.2", "config": "hostname router-2"},  # Override config
+        ],
+    }
+    resp = client.post(
+        "/device/bulk",
+        json=payload,
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+
+    assert resp.status_code == 201
+    reqs = calls["reqs"]
+    assert len(reqs) == 2  # type: ignore
+    assert reqs[0].config == "hostname base-router"  # type: ignore
+    assert reqs[0].command is None  # type: ignore
+    assert reqs[1].config == "hostname router-2"  # type: ignore
+    assert reqs[1].command is None  # type: ignore
+
+
+def test_device_bulk_per_device_command_config_conflict(monkeypatch, app_config):
+    """POST /device/bulk should reject devices with both command and config."""
+    monkeypatch.setattr(device_module, "drivers", {"netmiko": _StubDriver})
+    client = TestClient(controller.app)
+
+    payload = {
+        "driver": "netmiko",
+        "connection_args": {"username": "admin", "password": "admin"},
+        "command": "show version",
+        "devices": [
+            {"host": "10.0.0.1", "command": "show clock", "config": "hostname test"},  # Conflict
+        ],
+    }
+    resp = client.post(
+        "/device/bulk",
+        json=payload,
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert isinstance(detail, list)
+    assert len(detail) > 0
+    assert "cannot specify more than one" in detail[0]["msg"].lower()
+
+
+def test_template_render_missing_name(monkeypatch, app_config):
+    """POST /template/render should 404 when name missing (defaults to jinja2)."""
+    client = _client_with_stubs(monkeypatch)
+    resp = client.post(
+        "/template/render",
+        json={"template": "foo"},
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+    assert resp.status_code == 404
+
+
+def test_template_render_not_found(monkeypatch, app_config):
+    """POST /template/render should 404 for unknown renderer."""
+    client = _client_with_stubs(monkeypatch)
+    resp = client.post(
+        "/template/render",
+        json={"name": "unknown", "template": "foo"},
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+    assert resp.status_code == 404
+
+
+def test_template_render_success(monkeypatch, app_config):
+    """POST /template/render should return rendered output."""
+    client = _client_with_stubs(monkeypatch)
+    resp = client.post(
+        "/template/render",
+        json={"name": "stub", "template": "foo"},
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == "rendered"
+
+
+def test_template_parse_success(monkeypatch, app_config):
+    """POST /template/parse should return parsed data."""
+    client = _client_with_stubs(monkeypatch)
+    resp = client.post(
+        "/template/parse",
+        json={"name": "stub", "template": "foo", "context": "bar"},
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"parsed": True}
+
+
+def test_get_jobs_with_filters(monkeypatch, app_config):
+    client, stub = _client_with_manage_stub(monkeypatch)
+    resp = client.get(
+        "/jobs",
+        params={"queue": "FifoQ", "status": "finished"},
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+    assert resp.status_code == 200
+    assert stub.calls["get_job_list"] == ("FifoQ", "finished", None)
+    data = resp.json()
+    assert data[0]["queue"] == "FifoQ"
+
+
+def test_get_job_by_id(monkeypatch, app_config):
+    client, stub = _client_with_manage_stub(monkeypatch)
+    resp = client.get(
+        "/jobs/job-123",
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+    assert resp.status_code == 200
+    assert stub.calls["get_job_list_by_ids"] == ["job-123"]
+    assert resp.json()["id"] == "job-123"
+
+
+def test_delete_job_by_id(monkeypatch, app_config):
+    client, stub = _client_with_manage_stub(monkeypatch)
+
+    resp = client.delete(
+        "/jobs/job-1",
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+    assert resp.status_code == 200
+    assert stub.calls["cancel_job"] == ("job-1", None)
+    assert resp.json()["id"] == "job-1"
+
+
+def test_get_workers_with_queue(monkeypatch, app_config):
+    client, stub = _client_with_manage_stub(monkeypatch)
+    resp = client.get(
+        "/workers",
+        params={"queue": "HostQ_h1"},
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+    assert resp.status_code == 200
+    assert stub.calls["get_worker_list"] == "HostQ_h1"
+    assert resp.json()[0]["queues"] == ["HostQ_h1"]
+
+
+def test_kill_worker_by_name(monkeypatch, app_config):
+    client, stub = _client_with_manage_stub(monkeypatch)
+
+    resp = client.delete(
+        "/workers/worker-1",
+        headers={"X-API-KEY": app_config.server.api_key},
+    )
+    assert resp.status_code == 200
+    assert stub.calls["kill_worker"] == ("worker-1", None)
+    assert resp.json()["name"] == "worker-1"

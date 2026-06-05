@@ -1,0 +1,289 @@
+# 02-linux-net/configmap.yaml
+# ConfigMap for LinuxNet non-secret environment variables
+# This ConfigMap contains all non-sensitive configuration options shared by controller and worker
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: linux-net-config
+  namespace: linux-net
+  labels:
+    app: linux-net
+    component: shared
+# Update these values as needed for your deployment
+# Secrets (passwords, API keys) are NOT included here
+data:
+  LINUX_NET_LOG__LEVEL: "INFO"
+  LINUX_NET_WORKER__PINNED_PER_NODE: "128" # Max number of connected devices per pod
+  LINUX_NET_REDIS__HOST: "linux-net-redis-master"    # Operator 创建: 始终指向主节点
+  LINUX_NET_REDIS__PORT: "6379"
+  LINUX_NET_REDIS__TLS__ENABLED: "false"
+  # Vault Credential Provider Configuration
+  LINUX_NET_CREDENTIAL__ENABLED: "true"
+  LINUX_NET_CREDENTIAL__NAME: "vault_kv"
+  LINUX_NET_CREDENTIAL__ADDR: "http://vault:8200"
+  LINUX_NET_CREDENTIAL__ALLOWED_PATHS: "kv/linux-net"
+  LINUX_NET_CREDENTIAL__VERIFY: "false"
+  LINUX_NET_CREDENTIAL__CACHE_TTL: "60" # Optimized cache for production
+  LINUX_NET_STORAGE__STAGING: "/app/storage/staging"
+  # MongoDB audit log settings (set LINUX_NET_MONGODB__ENABLED=true to activate)
+  LINUX_NET_MONGODB__ENABLED: "false"
+  LINUX_NET_MONGODB__URI: "mongodb://mongodb:27017"
+  LINUX_NET_MONGODB__DATABASE: "linux-net"
+  LINUX_NET_MONGODB__COLLECTION: "audit_jobs"
+  LINUX_NET_MONGODB__DETACHED_COLLECTION: "audit_detached_tasks"
+  LINUX_NET_MONGODB__RETENTION_DAYS: "30"
+  LINUX_NET_MONGODB__DETACHED_RETENTION_DAYS: "30"
+  LINUX_NET_MONGODB__MAX_DOCUMENTS: "1000000"
+---
+# 02-linux-net/controller.deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-net-controller
+  namespace: linux-net
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: linux-net
+      component: controller
+  template:
+    metadata:
+      labels:
+        app: linux-net
+        component: controller
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: linux-net
+                  component: controller
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: controller
+        image: localhost/linux-net-controller:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "400m"   
+          limits:
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: linux-net-config
+        env:
+        - name: LINUX_NET_SERVER__API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: api-key
+        - name: LINUX_NET_REDIS__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: password
+        - name: LINUX_NET_REDIS__SENTINEL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: password
+        - name: LINUX_NET_VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: vault-token
+        ports:
+        - containerPort: 9000
+---
+# 02-linux-net/node-worker.deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-net-node-worker
+  namespace: linux-net
+spec:
+  replicas: 18
+  selector:
+    matchLabels:
+      app: linux-net
+      component: node-worker
+  template:
+    metadata:
+      labels:
+        app: linux-net
+        component: node-worker
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: linux-net
+                  component: node-worker
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: node-worker
+        image: localhost/linux-net-node-worker:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "2Gi"    
+            cpu: "300m"      
+          limits:
+            memory: "8Gi"    
+        envFrom:
+        - configMapRef:
+            name: linux-net-config
+        env:
+        - name: LINUX_NET_SERVER__API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: api-key
+        - name: LINUX_NET_REDIS__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: password
+        - name: LINUX_NET_REDIS__SENTINEL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: password
+        - name: LINUX_NET_VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: vault-token
+---
+# 02-linux-net/fifo-worker.deploy.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-net-fifo-worker
+  namespace: linux-net
+spec:
+  replicas: 12
+  selector:
+    matchLabels:
+      app: linux-net
+      component: fifo-worker
+  template:
+    metadata:
+      labels:
+        app: linux-net
+        component: fifo-worker
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: linux-net
+                  component: fifo-worker
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: fifo-worker
+        image: localhost/linux-net-fifo-worker:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "1Gi"  
+            cpu: "300m"     
+          limits:
+            memory: "2Gi"    
+        envFrom:
+        - configMapRef:
+            name: linux-net-config
+        env:
+        - name: LINUX_NET_SERVER__API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: api-key
+        - name: LINUX_NET_REDIS__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: password
+        - name: LINUX_NET_REDIS__SENTINEL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: password
+        - name: LINUX_NET_VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: vault-token
+---
+# 02-linux-net/archiver-worker.deploy.yaml
+# NOTE: Only apply this manifest when LINUX_NET_MONGODB__ENABLED=true.
+# When MongoDB is disabled, the archiver-worker exits cleanly on startup
+# but Kubernetes will restart it in a loop (Deployment restartPolicy is always Always).
+# Remove or skip this file if MongoDB is not part of your deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-net-archiver-worker
+  namespace: linux-net
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: linux-net
+      component: archiver-worker
+  template:
+    metadata:
+      labels:
+        app: linux-net
+        component: archiver-worker
+    spec:
+      containers:
+      - name: archiver-worker
+        image: localhost/linux-net-archiver-worker:latest
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+        envFrom:
+        - configMapRef:
+            name: linux-net-config
+        env:
+        - name: LINUX_NET_REDIS__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: password
+        - name: LINUX_NET_REDIS__SENTINEL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: linux-net-secrets
+              key: password
+---
+# 02-linux-net/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: linux-net
+  namespace: linux-net
+spec:
+  selector:
+    app: linux-net
+    component: controller
+  ports:
+  - port: 9000
+    targetPort: 9000
+  type: ClusterIP # Could be LoadBalancer if not using Ingress.

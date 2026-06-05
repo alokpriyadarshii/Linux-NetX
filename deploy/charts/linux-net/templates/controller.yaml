@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "linux-net.fullname" . }}-controller
+  labels:
+    {{- include "linux-net.labels" . | nindent 4 }}
+    component: controller
+spec:
+  replicas: {{ .Values.replicaCount.controller }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "linux-net.selectorLabels" . | nindent 6 }}
+      component: controller
+  template:
+    metadata:
+      labels:
+        {{- include "linux-net.selectorLabels" . | nindent 8 }}
+        component: controller
+    spec:
+      terminationGracePeriodSeconds: 60
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                {{- include "linux-net.selectorLabels" . | nindent 16 }}
+                component: controller
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: controller
+        image: "{{ .Values.images.controller.repository }}:{{ .Values.images.controller.tag }}"
+        imagePullPolicy: {{ .Values.images.controller.pullPolicy }}
+        resources:
+          {{- toYaml .Values.resources.controller | nindent 10 }}
+        readinessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - "import urllib.request, os; req = urllib.request.Request('http://localhost:9000/health', headers={'X-API-KEY': os.environ['LINUX_NET_SERVER__API_KEY']}); urllib.request.urlopen(req)"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - python3
+            - -c
+            - "import urllib.request, os; req = urllib.request.Request('http://localhost:9000/health', headers={'X-API-KEY': os.environ['LINUX_NET_SERVER__API_KEY']}); urllib.request.urlopen(req)"
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        envFrom:
+        - configMapRef:
+            name: {{ include "linux-net.fullname" . }}-config
+        env:
+        - name: LINUX_NET_SERVER__API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: api-key
+        - name: LINUX_NET_REDIS__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: password
+        - name: LINUX_NET_REDIS__SENTINEL__PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: password
+        - name: LINUX_NET_VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "linux-net.fullname" . }}-secrets
+              key: vault-token
+        ports:
+        - containerPort: 9000
+        volumeMounts:
+        - name: linux-net-storage
+          mountPath: /app/storage
+        {{- if eq .Values.config.redis.tls "true" }}
+        - name: redis-tls
+          mountPath: /app/redis/tls
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: linux-net-storage
+        persistentVolumeClaim:
+          claimName: {{ include "linux-net.fullname" . }}-storage
+      {{- if eq .Values.config.redis.tls "true" }}
+      - name: redis-tls
+        secret:
+          secretName: {{ include "linux-net.fullname" . }}-redis-tls
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "linux-net.fullname" . }}
+spec:
+  selector:
+    {{- include "linux-net.selectorLabels" . | nindent 4 }}
+    component: controller
+  ports:
+  - port: 9000
+    targetPort: 9000
+  type: ClusterIP

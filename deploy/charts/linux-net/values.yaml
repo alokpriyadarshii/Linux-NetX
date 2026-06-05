@@ -1,0 +1,114 @@
+# Default values for Linux-Net.
+global:
+  namespace: linux-net
+
+redis-operator:
+  enabled: true
+
+images:
+  controller:
+    repository: localhost/linux-net-controller
+    tag: "0.4.3"
+    pullPolicy: IfNotPresent
+  nodeWorker:
+    repository: localhost/linux-net-node-worker
+    tag: "0.4.3"
+    pullPolicy: IfNotPresent
+  fifoWorker:
+    repository: localhost/linux-net-fifo-worker
+    tag: "0.4.3"
+    pullPolicy: IfNotPresent
+  archiverWorker:
+    repository: localhost/linux-net-archiver-worker
+    tag: "0.4.3"
+    pullPolicy: IfNotPresent
+  vault:
+    repository: hashicorp/vault
+    tag: "1.21"
+  vaultInit:
+    # bitnami/kubectl: provides kubectl + sh, used by vault-init job to exec into vault pods
+    repository: bitnami/kubectl
+    tag: "1.27"
+
+replicaCount:
+  controller: 3
+  nodeWorker: 18
+  fifoWorker: 12
+  archiverWorker: 2
+  vault: 3
+
+resources:
+  controller:
+    requests:
+      cpu: "2000m"
+      memory: "2Gi"
+    limits:
+      cpu: "4000m"
+      memory: "8Gi"
+  nodeWorker:
+    requests:
+      cpu: "500m"
+      memory: "2Gi"
+    limits:
+      cpu: "2000m"
+      memory: "16Gi"
+  fifoWorker:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+  archiverWorker:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+
+persistence:
+  size: 100Gi
+  storageClassName: "longhorn"  # Must support ReadWriteMany; use longhorn or equivalent
+
+config:
+  logLevel: "INFO"
+  pinnedPerNode: "128"
+  storage:
+    retentionHours: "24"
+    staging: "/app/storage/staging"
+  redis:
+    host: "linux-net-redis-master"
+    port: "6379"
+    tls: "false"
+  vault:
+    addr: "http://vault:8200"
+    allowedPaths: "kv/linux-net"
+    cacheTtl: "60"
+    name: "vault_kv"      # Credential provider name, must match k8s config
+    verify: "false"       # TLS verification disabled (plain HTTP vault)
+  mongodb:
+    enabled: "false"
+    uri: "mongodb://localhost:27017"
+    database: "linux-net"
+    collection: "audit_jobs"
+    detachedCollection: "audit_detached_tasks"
+    retentionDays: "30"
+    detachedRetentionDays: "30"
+    maxDocuments: "1000000"
+
+secrets:
+  # IMPORTANT: Override these with real values at deploy time.
+  # Never commit real credentials to version control.
+  # Use: helm install linux-net ./deploy/charts/linux-net \
+  #        --set secrets.redisPassword=<real-pw> \
+  #        --set secrets.apiKey=<real-key> \
+  #        --set secrets.vaultToken=<real-token>
+  redisPassword: "redis-password-placeholder"
+  apiKey: "api-key-placeholder"
+  vaultToken: "vault-token-placeholder"
+ingress:
+  enabled: true
+  host: linux-net.example.com
+  annotations:
+    kubernetes.io/ingress.class: nginx

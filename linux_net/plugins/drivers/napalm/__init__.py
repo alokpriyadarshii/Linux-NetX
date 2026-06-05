@@ -1,0 +1,322 @@
+import logging
+from inspect import signature
+from typing import Optional
+
+from napalm.base import NetworkDriver, get_network_driver
+
+from ....models.driver import DriverExecutionResult
+from .. import BaseDriver
+from .model import (
+    DriverConnectionArgs,
+    NapalmCliArgs,
+    NapalmCommitConfigArgs,
+    NapalmConnectionArgs,
+    NapalmDeviceTestInfo,
+    NapalmExecutionRequest,
+)
+
+log = logging.getLogger(__name__)
+
+# Netmiko device types -> NAPALM ones
+# See napalm/_SUPPORTED_DRIVERS.py
+NETMIKO_DEVICE_TYPE_MAP = {
+    "arista_eos": "eos",
+    "cisco_ios": "ios",
+    "cisco_xr": "iosxr",
+    "juniper": "junos",
+    "nxos": "nxos",
+    "cisco_nxos_ssh": "nxos_ssh",
+}
+
+
+class NapalmDriver(BaseDriver):
+    driver_name = "napalm"
+
+    @classmethod
+    def from_execution_request(cls, req: NapalmExecutionRequest) -> "NapalmDriver":
+        """
+        Create driver instance from an execution request.
+        """
+        if not isinstance(req, NapalmExecutionRequest):
+            req = NapalmExecutionRequest.model_validate(req.model_dump())
+            req.connection_args = cls.convert_conn_args(req.connection_args)
+
+        # Set default driver_args if not provided
+        if req.driver_args is None:
+            req.driver_args = NapalmCliArgs() if req.command else NapalmCommitConfigArgs()
+
+        return cls(
+            args=req.driver_args,
+            conn_args=req.connection_args,
+            enabled=req.enable_mode,
+            dry_run=req.dry_run,
+            staged_file_id=req.staged_file_id,
+        )
+
+    @classmethod
+    def validate(cls, req: NapalmExecutionRequest) -> None:
+        """
+        Validate the request without creating the driver instance.
+
+        Raises:
+            pydantic.ValidationError: If the request model validation fails
+                (e.g., missing required fields, invalid field types).
+            ValueError: If device_type is None in connection_args.
+        """
+        # Validate the request model
+        if not isinstance(req, NapalmExecutionRequest):
+            req = NapalmExecutionRequest.model_validate(req.model_dump())
+
+        # Validate connection args and device_type conversion
+        cls.convert_conn_args(req.connection_args)
+
+    @classmethod
+    def convert_conn_args(cls, conn_args: DriverConnectionArgs) -> NapalmConnectionArgs:
+        """
+        Convert connection arguments to NAPALM format.
+
+        - host -> hostname (handled by Pydantic alias)
+        - device_type -> device_type (Netmiko convention to NAPALM convention)
+        """
+        if conn_args.device_type is None:
+            raise ValueError("device_type is None")
+
+        # Convert device_type from Netmiko to NAPALM convention (if needed)
+        conn_args.device_type = NETMIKO_DEVICE_TYPE_MAP.get(  # type: ignore
+            conn_args.device_type,
+            conn_args.device_type,  # default to itself
+        )
+
+        return (
+            conn_args
+            if isinstance(conn_args, NapalmConnectionArgs)
+            else NapalmConnectionArgs.model_validate(conn_args)
+        )
+
+    def __init__(
+        self,
+        conn_args: NapalmConnectionArgs,
+        args: NapalmCliArgs | NapalmCommitConfigArgs,
+        enabled: bool = False,
+        dry_run: bool = False,
+        staged_file_id: Optional[str] = None,
+        **kwargs,
+    ):
+        """
+        Initialize the NAPALM driver.
+        """
+        super().__init__(staged_file_id=staged_file_id, **kwargs)
+        self.args = args
+        self.conn_args = conn_args
+        self.enabled = enabled
+        self.dry_run = dry_run
+
+        log.debug(f"Initializing NAPALM driver with {conn_args}")
+
+        self.device = conn_args.device_type
+        self.dry_run = dry_run
+
+        self.conn_args = conn_args
+        self.args = args
+
+        self.conn_args_dict: dict = {}
+
+        try:
+            # Convert parameters format to NAPALM format
+            conn_args_dict = conn_args.model_dump(by_alias=True, exclude_none=True)
+            del conn_args_dict["device_type"]
+        except KeyError as e:
+            log.error(f"Failed to init NAPALM driver: {e}")
+            raise
+
+        # Handle optional arguments
+        optional_args = conn_args.optional_args if conn_args.optional_args else {}
+
+        # Set connection args
+        self.conn_args_dict = conn_args_dict
+        self.conn_args_dict["optional_args"] = optional_args
+
+    def connect(self) -> NetworkDriver:
+        """
+        Connect to the device and return the session.
+        """
+        try:
+            log.debug(f"Connecting to device: {self.conn_args.host} ({self.device})")
+            driver = get_network_driver(name=self.device)
+            return driver(**self.conn_args_dict)
+        except Exception as e:
+            log.error(f"Connection failed: {e}")
+            raise
+
+    def send(self, session: NetworkDriver, command: list[str]) -> list[DriverExecutionResult]:
+        """
+        Send commands to the device.
+        """
+        import time
+
+        assert isinstance(self.args, NapalmCliArgs)
+
+        if not command:
+            log.warning("No command provided")
+            return []
+
+        commands = command if isinstance(command, list) else [command]
+        result = []
+
+        try:
+            session.open()
+        except Exception as e:
+            log.error(f"Failed to open session: {e}")
+            return [
+                DriverExecutionResult(
+                    command=" ".join(commands),
+                    stdout="",
+                    stderr=f"Failed to open session: {e}",
+                    exit_status=1,
+                    metadata=self._get_base_metadata(time.perf_counter()),
+                )
+            ]
+
+        for cmd in commands:
+            start_time = time.perf_counter()
+            output = ""
+            error = ""
+            exit_status = 0
+
+            try:
+                if hasattr(session, str(cmd)):
+                    # Calling NAPALM method
+                    method = getattr(session, str(cmd))
+                    method_params = signature(method).parameters
+
+                    # Filter arguments based on method parameters
+                    args = {}
+                    if self.args:
+                        dumped = self.args.model_dump(exclude_none=True)
+                        args = {k: v for k, v in dumped.items() if k in method_params}
+
+                    log.info(f"Executing NAPALM method: {cmd} with args: {args}")
+                    output = method(**args)
+                else:
+                    # Use CLI command
+                    log.info(f"Executing CLI command: {cmd}")
+                    resp = session.cli([cmd], encoding=self.args.encoding)
+                    output = resp[cmd]
+            except Exception as e:
+                log.error(f"Command execution failed: {e}")
+                error = str(e)
+                exit_status = 1
+
+            duration_metadata = self._get_base_metadata(start_time)
+            result.append(
+                DriverExecutionResult(
+                    command=cmd,
+                    stdout=str(output),
+                    stderr=error,
+                    exit_status=exit_status,
+                    metadata=duration_metadata,
+                )
+            )
+
+        return result
+
+    def config(self, session: NetworkDriver, cfg: list[str]) -> list[DriverExecutionResult]:
+        """
+        Configure the device.
+        """
+        import time
+
+        assert isinstance(self.args, NapalmCommitConfigArgs)
+
+        if not cfg:
+            log.warning("No configuration provided")
+            return []
+
+        start_time = time.perf_counter()
+        # Process config format
+        if isinstance(cfg, list):
+            cfg_text = cfg[0] if len(cfg) == 1 else "\n".join(cfg)
+        else:
+            cfg_text = str(cfg)
+
+        try:
+            session.open()
+            # Load candidate configuration
+            session.load_merge_candidate(config=cfg_text)
+            diff = session.compare_config()
+        except Exception as e:
+            log.error(f"Configuration setup failed: {e}")
+            return [
+                DriverExecutionResult(
+                    command=cfg_text,
+                    stdout="",
+                    stderr=str(e),
+                    exit_status=1,
+                    metadata=self._get_base_metadata(start_time),
+                )
+            ]
+
+        log.debug(f"Configuration diff: {diff[:50]}...")
+
+        error = ""
+        exit_status = 0
+        # Apply or discard configuration
+        try:
+            if self.dry_run:
+                log.info("Dry-run mode: not committing configuration")
+                session.discard_config()
+            else:
+                log.info(f"Committing configuration: {self.args}")
+                session.commit_config(**self.args.model_dump(exclude_none=True))
+        except Exception as e:
+            log.error(f"Configuration commit failed: {e}")
+            error = str(e)
+            exit_status = 1
+
+        return [
+            DriverExecutionResult(
+                command=cfg_text,
+                stdout=diff,
+                stderr=error,
+                exit_status=exit_status,
+                metadata=self._get_base_metadata(start_time),
+            )
+        ]
+
+    def disconnect(self, session):
+        """
+        Disconnect from the device.
+        """
+        try:
+            log.debug("Disconnecting from device")
+            if session:
+                session.close()
+            return True
+        except Exception as e:
+            log.error(f"Disconnection failed: {e}")
+            raise
+
+    @classmethod
+    def test(cls, connection_args: NapalmConnectionArgs) -> NapalmDeviceTestInfo:
+        conn_args = (
+            connection_args
+            if isinstance(connection_args, NapalmConnectionArgs)
+            else NapalmConnectionArgs.model_validate(connection_args.model_dump(exclude_none=True))
+        )
+        conn_args = cls.convert_conn_args(conn_args)
+
+        driver = cls(conn_args=conn_args, args=NapalmCliArgs(), dry_run=True)
+        session = None
+        try:
+            session = driver.connect()
+            session.open()
+            return NapalmDeviceTestInfo(host=conn_args.host)
+        finally:
+            if session:
+                try:
+                    session.close()
+                except Exception as e:
+                    log.warning(f"Error in disconnecting test connection: {e!s}")
+
+
+__all__ = ["NapalmDriver"]

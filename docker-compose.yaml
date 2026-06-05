@@ -1,0 +1,161 @@
+services:
+  controller:
+    image: localhost/linux-net-controller:latest
+    build:
+      context: .
+      dockerfile: ./docker/controller.dockerfile
+    env_file:
+      - .env
+    environment:
+      - LINUX_NET_STORAGE__STAGING=/app/storage/staging
+    volumes:
+      - ./config:/app/config:z
+      - ./redis/tls:/app/redis/tls:ro,z
+      - linux-net_staging:/app/storage/staging
+    ports:
+      - "9000:9000"
+    networks:
+      - "linux-net-network"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  node-worker:
+    image: localhost/linux-net-node-worker:latest
+    build:
+      context: .
+      dockerfile: ./docker/node_worker.dockerfile
+    env_file:
+      - .env
+    environment:
+      - LINUX_NET_STORAGE__STAGING=/app/storage/staging
+    volumes:
+      - ./config:/app/config:z
+      - ./redis/tls:/app/redis/tls:ro,z
+      - linux-net_staging:/app/storage/staging
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - "linux-net-network"
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  fifo-worker:
+    image: localhost/linux-net-fifo-worker:latest
+    build:
+      context: .
+      dockerfile: docker/fifo_worker.dockerfile
+    env_file:
+      - .env
+    environment:
+      - LINUX_NET_STORAGE__STAGING=/app/storage/staging
+    volumes:
+      - ./config:/app/config:z
+      - ./redis/tls:/app/redis/tls:ro,z
+      - linux-net_staging:/app/storage/staging
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - "linux-net-network"
+    restart: unless-stopped
+
+  archiver-worker:
+    image: localhost/linux-net-archiver-worker:latest
+    build:
+      context: .
+      dockerfile: docker/archiver_worker.dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./config:/app/config:z
+      - ./redis/tls:/app/redis/tls:ro,z
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - "linux-net-network"
+    restart: on-failure  # exits 0 when MongoDB disabled (no restart); restarts on connection errors
+
+  vault:
+    image: hashicorp/vault:1.21
+    container_name: linux-net-vault
+    env_file:
+      - .env
+    environment:
+      - VAULT_ADDR=http://127.0.0.1:8200
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./vault/config:/vault/config:ro,z
+      - ./vault/data:/vault/data:z
+      - vault_logs:/vault/logs
+    command: vault server -config=/vault/config/vault.hcl
+    networks:
+      - "linux-net-network"
+    restart: unless-stopped
+    healthcheck:
+      # `vault status` exits 2 when sealed (not an error for us), 0 when unsealed.
+      # Exit codes 1+ are errors; exit 2 means "sealed but reachable" which is healthy enough
+      # for vault-init to proceed. Without this, Docker marks the container unhealthy
+      # while sealed, and vault-init (which depends on service_healthy) never starts.
+      test: ["CMD-SHELL", "vault status -address=http://127.0.0.1:8200 || [ $? -eq 2 ]"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  vault-init:
+    image: hashicorp/vault:1.21
+    container_name: linux-net-vault-init
+    depends_on:
+      vault:
+        condition: service_healthy
+    volumes:
+      - ./scripts/vault_auto_init.sh:/usr/local/bin/vault_auto_init.sh:ro
+      - ./vault/data:/vault/data:z
+    entrypoint: ["/bin/sh", "/usr/local/bin/vault_auto_init.sh"]
+    restart: on-failure
+    env_file:
+      - .env
+    environment:
+      - VAULT_ADDR=http://vault:8200
+    networks:
+      - "linux-net-network"
+
+  redis:
+    image: redis:7-bookworm
+    env_file:
+      - .env
+    volumes:
+      - ./redis/redis.conf:/etc/redis/redis.conf:ro,z
+      - ./redis/tls:/etc/redis/tls:ro,z
+      - redis_data:/data
+    command: redis-server /etc/redis/redis.conf --requirepass "${LINUX_NET_REDIS__PASSWORD}"
+    networks:
+      - "linux-net-network"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--tls", "--cert", "/etc/redis/tls/redis.crt", "--key", "/etc/redis/tls/redis.key", "--cacert", "/etc/redis/tls/ca.crt", "-p", "6379", "-a", "${LINUX_NET_REDIS__PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  linux-net-network:
+    name: "linux-net-network"
+
+volumes:
+  redis_data:
+    name: "linux-net-redis-data"
+
+  vault_logs:
+    name: "linux-net-vault-logs"
+  linux-net_staging:
+    name: "linux-net-staging"

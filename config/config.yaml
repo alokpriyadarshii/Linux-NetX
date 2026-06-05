@@ -1,0 +1,60 @@
+server:
+  host: 0.0.0.0
+  port: 9000
+  api_key: ${LINUX_NET_SERVER__API_KEY}
+  api_key_name: X-API-KEY
+  gunicorn_worker: 4
+
+job:
+  ttl: 1800
+  timeout: 300
+  result_ttl: 300
+
+worker:
+  scheduler: "load_weighted_random"
+  ttl: 300
+  pinned_per_node: 128
+
+redis:
+  host: redis
+  port: 6379
+  password: ${LINUX_NET_REDIS__PASSWORD}
+  timeout: 30
+  keepalive: 30
+  tls:
+    enabled: true
+    ca: redis/tls/ca.crt
+    cert: redis/tls/redis.crt
+    key: redis/tls/redis.key
+  sentinel:
+    enabled: false
+    host: redis-sentinel
+    port: 26379
+    master_name: mymaster
+    password: ${LINUX_NET_REDIS__SENTINEL__PASSWORD}
+  key:
+    host_to_node_map: linux_net:host_to_node_map
+    node_info_map: linux_net:node_info_map
+
+plugin:
+  driver: linux_net/plugins/drivers/
+  webhook: linux_net/plugins/webhooks/
+  template: linux_net/plugins/templates/
+  scheduler: linux_net/plugins/schedulers/
+  credential: linux_net/plugins/credentials/
+
+credential:
+  enabled: false
+  name: vault_kv
+  # addr: http://vault:8200
+  # namespace: ""
+  # allowed_paths: ["kv/linux_net"]
+  # cache_ttl: 30
+  # verify: true  # or path to CA bundle
+  # token: ${LINUX_NET_VAULT_TOKEN} # Modify this before use
+  # role_id: ${LINUX_NET_VAULT_ROLE_ID} # Modify this before use
+  # secret_id: ${LINUX_NET_VAULT_SECRET_ID} # Modify this before use
+
+log:
+  config: config/log-config.yaml
+  level: INFO
