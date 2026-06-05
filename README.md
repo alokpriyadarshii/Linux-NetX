@@ -6,6 +6,8 @@ It uses a controller/worker architecture with **Redis + RQ** for queueing, plugg
 
 ---
 
+## Preview
+
 ## Key Features
 
 - Unified REST API for device command execution and configuration deployment.
@@ -288,7 +290,7 @@ bash scripts/generate_redis_certs.sh
 
 ## Tech Stack
 
-| Category | Technologies |
+| Category | Technology |
 |---|---|
 | Language | Python 3.12+ |
 | API Framework | FastAPI |
