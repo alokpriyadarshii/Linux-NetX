@@ -8,6 +8,11 @@ It uses a controller/worker architecture with **Redis + RQ** for queueing, plugg
 
 ## Preview
 
+<img src="./images/preview-1.png" alt="NetX Preview 1" width="100%" />
+<img src="./images/preview-2.png" alt="NetX Preview 2" width="100%" />
+<img src="./images/preview-3.png" alt="NetX Preview 3" width="100%" />
+<img src="./images/preview-4.png" alt="NetX Preview 4" width="100%" />
+
 ## Key Features
 
 - Unified REST API for device command execution and configuration deployment.
