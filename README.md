@@ -26,36 +26,230 @@ It uses a controller/worker architecture with **Redis + RQ** for queueing, plugg
 
 ---
 
-## Repository Structure
+## Project Structure
 
 ```text
 Linux-Net/
-├── linux_net/
-│   ├── controller.py            # FastAPI application entrypoint
-│   ├── routes/                  # REST API routes
-│   ├── models/                  # Pydantic request/response models
-│   ├── services/                # Manager, Redis, RPC, supervisor, audit logic
-│   ├── plugins/                 # Drivers, templates, schedulers, webhooks, credentials
-│   ├── worker/                  # Worker runtime implementations
-│   ├── cli/                     # linux-net-cli client
-│   └── utils/                   # Config, logging, exceptions
-├── docker/                      # Controller and worker Dockerfiles
-├── config/                      # Runtime configuration and log configuration
-├── redis/                       # Redis config and generated TLS material
-├── vault/                       # Vault config/data for local deployment
+├── .github/
+│   └── workflows/
+│       ├── docs.yml
+│       ├── ruff.yml
+│       └── test-containerlab.yml
+├── config/
+│   ├── config.yaml
+│   └── log-config.yaml
 ├── deploy/
-│   ├── k8s/                     # Raw Kubernetes manifests
-│   └── charts/linux-net/        # Helm chart
-├── scripts/                     # Environment, cert, Vault, deployment helpers
-├── tests/                       # Unit, API, and e2e tests
-├── postman/                     # Postman API collection
-├── images/                      # README/architecture preview images
-├── docker-compose.yaml          # Production-style local deployment
-├── docker-compose.dev.yaml      # Development support services
-├── pyproject.toml               # Python package metadata
-├── Makefile                     # Common commands
-└── README.md
-```
+│   ├── charts/
+│   │   └── linux-net/
+│   │       ├── Chart.yaml
+│   │       ├── values.yaml
+│   │       └── templates/
+│   │           ├── NOTES.txt
+│   │           ├── _helpers.tpl
+│   │           ├── config.yaml
+│   │           ├── controller.yaml
+│   │           ├── ingress.yaml
+│   │           ├── redis.yaml
+│   │           ├── storage.yaml
+│   │           ├── vault-init.yaml
+│   │           ├── vault.yaml
+│   │           └── workers.yaml
+│   ├── k8s/
+│   │   ├── scripts/
+│   │   │   ├── distribute_images.sh
+│   │   │   ├── k8s_setup_secrets.sh
+│   │   │   └── vault_auto_init.sh
+│   │   ├── 00-secrets.yaml
+│   │   ├── 01-linux-net-storage.yaml
+│   │   ├── 01-redis-operator.yaml
+│   │   ├── 01-redis.yaml
+│   │   ├── 02-linux-net.yaml
+│   │   ├── 02-redis-operator.yaml
+│   │   ├── 03-ingress.yaml
+│   │   ├── 03-redis-cluster.yaml
+│   │   ├── 04-nodeport.yaml
+│   │   ├── 04-vault.yaml
+│   │   ├── 05-vault-init.yaml
+│   │   ├── 05-vault.yaml
+│   │   ├── 06-linux-net-core.yaml
+│   │   ├── 07-ingress.yaml
+│   │   ├── 08-nodeport.yaml
+│   │   ├── 09-mongodb.yaml
+│   │   ├── calico-ippool-v2.yaml
+│   │   └── README.md
+│   └── README.md
+├── docker/
+│   ├── archiver_worker.dockerfile
+│   ├── controller.dockerfile
+│   ├── fifo_worker.dockerfile
+│   ├── node_worker.dockerfile
+│   └── ssh_config
+├── docs/
+│   ├── assets/
+│   ├── en/
+│   ├── overrides/
+│   │   └── main.html
+│   └── stylesheets/
+│       ├── code-pro.css
+│       ├── extra.css
+│       ├── menu-enhanced.css
+│       └── minimal.css
+├── images/
+│   ├── preview-1.png
+│   ├── preview-2.png
+│   ├── preview-3.png
+│   └── preview-4.png
+├── linux_net/
+│   ├── cli/
+│   │   ├── csv/
+│   │   │   └── devices.csv
+│   │   ├── examples/
+│   │   │   ├── test_devices.csv
+│   │   │   ├── test_empty_devices.csv
+│   │   │   └── test_template.textfsm
+│   │   └── main.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── common.py
+│   │   ├── driver.py
+│   │   ├── request.py
+│   │   └── response.py
+│   ├── plugins/
+│   │   ├── credentials/
+│   │   │   └── vault_kv/
+│   │   ├── drivers/
+│   │   │   ├── napalm/
+│   │   │   ├── netmiko/
+│   │   │   ├── paramiko/
+│   │   │   └── pyeapi/
+│   │   ├── schedulers/
+│   │   │   ├── greedy/
+│   │   │   ├── least_load/
+│   │   │   ├── least_load_random/
+│   │   │   └── load_weighted_random/
+│   │   ├── templates/
+│   │   │   ├── jinja2/
+│   │   │   ├── textfsm/
+│   │   │   └── ttp/
+│   │   └── webhooks/
+│   │       └── basic/
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   ├── detached_task.py
+│   │   ├── device.py
+│   │   ├── manage.py
+│   │   ├── storage.py
+│   │   └── template.py
+│   ├── server/
+│   │   ├── __init__.py
+│   │   └── common.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── audit.py
+│   │   ├── manager.py
+│   │   ├── rediz.py
+│   │   ├── rpc.py
+│   │   └── supervisor.py
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── config.py
+│   │   ├── exceptions.py
+│   │   └── logger.py
+│   ├── worker/
+│   │   ├── __init__.py
+│   │   ├── archiver.py
+│   │   ├── common.py
+│   │   ├── fifo.py
+│   │   ├── node.py
+│   │   └── pinned.py
+│   ├── __init__.py
+│   └── controller.py
+├── postman/
+│   └── Linux-Net.postman_collection.json
+├── redis/
+│   ├── tls/
+│   │   ├── ca.crt
+│   │   ├── ca.key
+│   │   ├── ca.txt
+│   │   ├── redis.crt
+│   │   ├── redis.dh
+│   │   └── redis.key
+│   └── redis.conf
+├── scripts/
+│   ├── docker_auto_deploy.sh
+│   ├── export_openapi.py
+│   ├── generate_redis_certs.sh
+│   ├── k8s_setup_secrets.sh
+│   ├── setup_env.sh
+│   ├── setup_git_template.sh
+│   └── vault_auto_init.sh
+├── tests/
+│   ├── clab/
+│   │   ├── README.md
+│   │   └── e2e.clab.yaml
+│   ├── data/
+│   │   ├── config.e2e.yaml
+│   │   └── config.test.yaml
+│   ├── e2e/
+│   │   ├── __init__.py
+│   │   ├── conftest.py
+│   │   ├── settings.py
+│   │   ├── test_api.py
+│   │   ├── test_driver_netmiko.py
+│   │   └── test_driver_paramiko.py
+│   ├── unit/
+│   │   ├── conftest.py
+│   │   ├── test_api_integration.py
+│   │   ├── test_audit.py
+│   │   ├── test_credentials.py
+│   │   ├── test_driver_netmiko.py
+│   │   ├── test_driver_paramiko.py
+│   │   ├── test_driver_paramiko_advanced.py
+│   │   ├── test_driver_paramiko_detach.py
+│   │   ├── test_driver_paramiko_detached_advanced.py
+│   │   ├── test_driver_paramiko_jinja2.py
+│   │   ├── test_driver_paramiko_proxy.py
+│   │   ├── test_infra.py
+│   │   ├── test_logger.py
+│   │   ├── test_manager.py
+│   │   ├── test_models.py
+│   │   ├── test_plugin_loader.py
+│   │   ├── test_routes.py
+│   │   ├── test_routes_storage.py
+│   │   ├── test_rpc.py
+│   │   ├── test_schedulers.py
+│   │   ├── test_security.py
+│   │   ├── test_template.py
+│   │   ├── test_webhooks.py
+│   │   └── test_worker.py
+│   ├── README.md
+│   ├── __init__.py
+│   ├── conftest.py
+│   └── verify_new_detach.py
+├── tools/
+│   └── webhook/
+│       ├── README.md
+│       └── webhook_server.py
+├── vault/
+│   └── config/
+│       └── vault.hcl
+├── .dockerignore
+├── .env.example
+├── .gitignore
+├── .gitmessage
+├── .python-version
+├── .readthedocs.yaml
+├── docker-compose.dev.yaml
+├── docker-compose.yaml
+├── gunicorn.conf.py
+├── LICENSE
+├── llms.txt
+├── Makefile
+├── mkdocs.yml
+├── pyproject.toml
+├── README.md
+├── repomix.config.json
+└── worker.py
 
 ---
 
@@ -91,6 +285,29 @@ bash scripts/generate_redis_certs.sh
 ```
 
 ---
+
+## Tech Stack
+
+| Category | Technologies |
+|---|---|
+| Language | Python 3.12+ |
+| API Framework | FastAPI |
+| ASGI / Server | Uvicorn, Gunicorn, Uvloop |
+| Data Validation | Pydantic, Pydantic Settings |
+| Task Queue | Redis Queue, RQ |
+| Cache / Broker | Redis |
+| Database | MongoDB, PyMongo |
+| Secrets Management | HashiCorp Vault, HVAC |
+| Network Automation | Netmiko, Paramiko, NAPALM, ncclient, puresnmp, pyeapi |
+| Template Engines | Jinja2, TextFSM, NTC Templates, TTP |
+| CLI Tools | Rich, Pandas, OpenPyXL |
+| Deployment | Docker, Docker Compose, Kubernetes, Helm |
+| Kubernetes Components | Ingress, NodePort, Persistent Storage, Redis Operator |
+| Testing | Pytest, Pytest-Cov, Fakeredis, HTTPX |
+| Code Quality | Ruff |
+| Documentation | MkDocs, MkDocs Material, Read the Docs |
+| API Testing | Postman |
+| CI/CD | GitHub Actions |
 
 ## Prerequisites
 
