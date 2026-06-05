@@ -88,8 +88,8 @@ linux-net-cli = "linux_net.cli.main:main"
 "Bug Tracker" = "https://github.com/alokpriyadarshii/Linux-Net/issues"
 "Changelog" = "https://github.com/alokpriyadarshii/Linux-Net/blob/master/CHANGELOG.md"
 
-[tool.setuptools]
-packages = ["linux_net"]
+[tool.setuptools.packages.find]
+include = ["linux_net*"]
 
 [tool.setuptools.exclude-package-data]
 "*" = [
