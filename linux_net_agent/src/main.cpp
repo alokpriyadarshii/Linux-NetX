@@ -461,10 +461,10 @@ HostStats HostInspector::read_stats() const {
     }
 
     stats.cgroup_path = read_file("/proc/self/cgroup");
-    for (const std::string& ns : {"mnt", "pid", "net", "uts", "ipc", "user", "cgroup"}) {
+    for (const char* ns : {"mnt", "pid", "net", "uts", "ipc", "user", "cgroup"}) {
         const std::string target = read_link(std::filesystem::path("/proc/self/ns") / ns);
         if (!target.empty()) {
-            stats.namespaces.push_back(ns + ":" + target);
+            stats.namespaces.push_back(std::string(ns) + ":" + target);
         }
     }
     return stats;
@@ -584,7 +584,17 @@ void AgentServer::handle_client(int client_fd) {
              << "Connection: close\r\n\r\n"
              << payload;
     const std::string wire = response.str();
-    ::write(client_fd, wire.data(), wire.size());
+    std::size_t sent = 0;
+    while (sent < wire.size()) {
+        const ssize_t written = ::write(client_fd, wire.data() + sent, wire.size() - sent);
+        if (written <= 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            break;
+        }
+        sent += static_cast<std::size_t>(written);
+    }
 }
 
 std::string AgentServer::route(

@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class DriverExecutionResult(BaseModel):
@@ -15,6 +15,14 @@ class DriverExecutionResult(BaseModel):
     download_url: Optional[str] = None  # Formal field for file resources
     metadata: Dict[str, Any] = Field(default_factory=dict)
     parsed: Optional[Any] = None
+
+    @computed_field
+    @property
+    def output(self) -> Any:
+        """
+        Backward-compatible alias for older API clients that consumed `output`.
+        """
+        return self.stdout
 
     model_config = ConfigDict(
         populate_by_name=True,
