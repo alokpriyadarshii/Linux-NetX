@@ -14,7 +14,8 @@ TARGET_PASSWORD = os.getenv("LINUX_NET_VERIFY_PASSWORD", "")
 def test_new_detach_flow():
     if not API_KEY or not TARGET_PASSWORD:
         raise RuntimeError(
-            "Set LINUX_NET_SERVER__API_KEY and LINUX_NET_VERIFY_PASSWORD before running this helper."
+            "Set LINUX_NET_SERVER__API_KEY and LINUX_NET_VERIFY_PASSWORD before running "
+            "this helper."
         )
 
     headers = {"X-API-Key": API_KEY}

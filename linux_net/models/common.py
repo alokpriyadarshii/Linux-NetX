@@ -29,6 +29,8 @@ class JobAdditionalData(BaseModel):
 
     error: Optional[Tuple[str, str]] = None  # 0: exc_type, 1: exc_value
     task_id: Optional[str] = None
+    request_id: Optional[str] = None
+    job_trace_id: Optional[str] = None
     device_name: Optional[str] = None
     command: Optional[List[str]] = None
 

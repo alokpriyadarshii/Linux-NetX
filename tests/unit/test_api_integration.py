@@ -1,4 +1,3 @@
-
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +10,7 @@ from linux_net import controller
 @pytest.fixture
 def api_client():
     return TestClient(controller.app)
+
 
 @pytest.mark.api
 class TestAPIIntegration:
@@ -28,10 +28,11 @@ class TestAPIIntegration:
 
         # Target the modules directly
         # Ensure Manager uses fakeredis
-        with patch("linux_net.routes.device.drivers", {"netmiko": mock_driver_cls}), \
-             patch("linux_net.services.rpc.drivers", {"netmiko": mock_driver_cls}), \
-             patch("linux_net.services.manager.g_mgr.rdb", unit_runtime.redis):
-
+        with (
+            patch("linux_net.routes.device.drivers", {"netmiko": mock_driver_cls}),
+            patch("linux_net.services.rpc.drivers", {"netmiko": mock_driver_cls}),
+            patch("linux_net.services.manager.g_mgr.rdb", unit_runtime.redis),
+        ):
             # Mock _check_worker_alive to always return True
             monkeypatch.setattr(
                 "linux_net.services.manager.g_mgr._check_worker_alive", lambda q: True
@@ -41,14 +42,12 @@ class TestAPIIntegration:
                 "driver": "netmiko",
                 "connection_args": {"host": "1.2.3.4", "username": "test", "password": "test"},
                 "command": "display version",
-                "queue_strategy": "fifo"
+                "queue_strategy": "fifo",
             }
 
             # 2. Perform the request
             resp = api_client.post(
-                "/device/exec",
-                json=payload,
-                headers={"X-API-KEY": app_config.server.api_key}
+                "/device/exec", json=payload, headers={"X-API-KEY": app_config.server.api_key}
             )
 
             # 3. Verify results
@@ -69,10 +68,7 @@ class TestAPIIntegration:
         """
         from linux_net.models.response import SystemStatsResponse
 
-        resp = api_client.get(
-            "/system/stats",
-            headers={"X-API-KEY": app_config.server.api_key}
-        )
+        resp = api_client.get("/system/stats", headers={"X-API-KEY": app_config.server.api_key})
         assert resp.status_code == 200
         data = resp.json()
         SystemStatsResponse.model_validate(data)
@@ -91,14 +87,13 @@ class TestAPIIntegration:
                 "host": "1.1.1.1",
                 "driver": "netmiko",
                 "status": "running",
-                "connection_args": {"host": "1.1.1.1"}
+                "connection_args": {"host": "1.1.1.1"},
             }
         }
 
         with patch("linux_net.routes.detached_task.g_mgr", mock_mgr):
             resp = api_client.get(
-                "/detached-tasks",
-                headers={"X-API-KEY": app_config.server.api_key}
+                "/detached-tasks", headers={"X-API-KEY": app_config.server.api_key}
             )
             assert resp.status_code == 200
             data = resp.json()

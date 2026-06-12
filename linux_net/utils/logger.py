@@ -1,11 +1,14 @@
 import logging
 import logging.config
+import os
 import re
 from pathlib import Path
 from typing import Any, Optional, Union
 
 import yaml
 from colorlog import ColoredFormatter
+
+from ..services.observability import JsonLogFormatter, RequestContextFilter
 
 
 class ScrubFilter(logging.Filter):
@@ -77,8 +80,13 @@ def setup_logging(log_config_filename: Path, overridden_level: Optional[str] = N
 
     root_logger = logging.getLogger()
     scrub_filter = ScrubFilter()
+    context_filter = RequestContextFilter()
     for handler in root_logger.handlers:
         handler.addFilter(filter=scrub_filter)
-        colorize(handler)
+        handler.addFilter(filter=context_filter)
+        if os.getenv("LINUX_NET_JSON_LOGS", "").lower() in {"1", "true", "yes"}:
+            handler.setFormatter(JsonLogFormatter())
+        else:
+            colorize(handler)
 
     logging.getLogger(__name__).info(f"Logger configured with {log_config_filename}")

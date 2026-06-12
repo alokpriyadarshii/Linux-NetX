@@ -112,10 +112,7 @@ def _prune_collection_by_count(
     limit = min(overage, batch_size)
     try:
         ids = [
-            doc["_id"]
-            for doc in collection.find({}, {"_id": 1})
-            .sort("created_at", 1)
-            .limit(limit)
+            doc["_id"] for doc in collection.find({}, {"_id": 1}).sort("created_at", 1).limit(limit)
         ]
         if ids:
             result = collection.delete_many({"_id": {"$in": ids}})

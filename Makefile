@@ -1,4 +1,5 @@
-.PHONY: help deploy build up down logs ps watch scale lint format clean clean-all restart shell stats health ai-docs
+.PHONY: help deploy build up down logs ps watch scale lint lint-fix format test security quality clean clean-all restart shell stats health ai-docs
+.PHONY: agent-build agent-run
 .PHONY: dev-up dev-down dev-build dev-logs dev-ps dev-watch dev-restart dev-shell
 .PHONY: prod-up prod-down prod-build prod-rebuild prod-logs prod-ps prod-restart prod-shell
 
@@ -48,8 +49,11 @@ help:
 	@echo "  make scale NODE=2 FIFO=1  - Scale workers (default: NODE=2, FIFO=1)"
 	@echo ""
 	@echo "Development:"
-	@echo "  make lint        - Run code linting and auto-fix issues"
+	@echo "  make lint        - Run code linting checks"
+	@echo "  make lint-fix    - Auto-fix lint issues locally"
 	@echo "  make format      - Format code"
+	@echo "  make quality     - Run lint, format check, tests, and security scan"
+	@echo "  make agent-build - Build the C++ Linux agent"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean       - Stop Docker services (preserves data volumes)"
@@ -233,12 +237,41 @@ scale:
 
 # Development operations
 lint:
-	@echo "🔍 Running code linting and auto-fixing..."
+	@echo "🔍 Running code linting checks..."
+	ruff check .
+
+lint-fix:
+	@echo "🔍 Auto-fixing code lint issues..."
 	ruff check --fix .
 
 format:
 	@echo "✨ Formatting code..."
 	ruff format .
+
+test:
+	@echo "🧪 Running unit tests with coverage threshold..."
+	pytest tests/unit --cov=linux_net --cov-fail-under=45
+
+security:
+	@echo "🔐 Running security scan..."
+	bandit -c pyproject.toml linux_net/controller.py linux_net/routes/manage.py linux_net/services/observability.py
+
+quality:
+	@echo "✅ Running quality gates..."
+	ruff format --check .
+	ruff check .
+	mypy
+	pytest tests/unit --cov=linux_net --cov-fail-under=45
+	bandit -c pyproject.toml linux_net/controller.py linux_net/routes/manage.py linux_net/services/observability.py
+
+agent-build:
+	@echo "🛠️  Building C++ Linux agent..."
+	cmake -S linux_net_agent -B linux_net_agent/build
+	cmake --build linux_net_agent/build --parallel
+
+agent-run: agent-build
+	@echo "🚀 Starting C++ Linux agent on 127.0.0.1:7070..."
+	./linux_net_agent/build/linux-net-agent --host 127.0.0.1 --port 7070
 
 # Cleanup operations
 clean:
@@ -275,4 +308,3 @@ ai-docs:
 	fi
 	@cp llms.txt ai-docs/llms.txt
 	@echo "✅ AI Knowledge Kit updated in ai-docs/ directory!"
-

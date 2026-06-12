@@ -2,7 +2,7 @@
 
 Linux-Net is a distributed **FastAPI based network and Linux automation platform** for executing commands, pushing configuration, transferring files, and managing long running tasks across network devices and Linux hosts.
 
-It uses a controller/worker architecture with **Redis + RQ** for queueing, pluggable execution drivers such as **Netmiko**, **Paramiko**, **NAPALM**, and **PyEAPI**, plus optional **Vault KV** credential storage and **MongoDB** audit archiving.
+It uses a controller/worker architecture with **Redis + RQ** for queueing, pluggable execution drivers such as **Netmiko**, **Paramiko**, **NAPALM**, and **PyEAPI**, plus optional **Vault KV** credential storage, **MongoDB** audit archiving, Prometheus metrics, request trace propagation, and a standalone **C++20 Linux host agent** for deeper OS-level automation.
 
 ---
 
@@ -21,16 +21,19 @@ It uses a controller/worker architecture with **Redis + RQ** for queueing, plugg
 - Single-device and bulk-device execution APIs.
 - Pluggable driver system for `netmiko`, `paramiko`, `napalm`, and `pyeapi`.
 - FIFO and pinned queue strategies for scalable execution.
+- Queue backpressure, worker latency, job duration, active/queued/failed job metrics, and visible scheduler state.
 - Persistent SSH sessions and keepalive support for low-latency repeated operations.
 - Detached/background Linux task execution through the Paramiko driver.
+- Optional C++20 Linux agent under `linux_net_agent/` for command execution, process monitoring, CPU/memory stats, log capture, signals, PTY support, health checks, cgroup/namespace awareness, and systemd service mode.
 - File upload/download workflow with staged storage and download URLs.
 - Template rendering with Jinja2.
 - Output parsing with TextFSM and TTP.
 - Webhook callbacks with retry support.
+- Prometheus metrics endpoint, structured JSON logs, request ID propagation, and job trace IDs.
 - API-key authentication through `X-API-KEY`.
 - Optional Vault KV credential provider to avoid sending passwords in every request.
 - Optional MongoDB archiver worker for audit/compliance records.
-- Docker Compose, Kubernetes YAML, and Helm deployment assets.
+- Docker Compose, Kubernetes YAML, Helm deployment assets, Docker build validation, Helm lint, Kubernetes manifest validation, Ruff, mypy, pytest coverage, Bandit security scan, and C++ agent build in CI.
 - Postman collection included under `postman/`.
 
 ---
@@ -173,6 +176,11 @@ Linux-Net/
 │   │   └── pinned.py
 │   ├── __init__.py
 │   └── controller.py
+├── linux_net_agent/
+│   ├── CMakeLists.txt
+│   ├── include/
+│   ├── src/
+│   └── systemd/
 ├── postman/
 │   └── Linux-Net.postman_collection.json
 ├── redis/

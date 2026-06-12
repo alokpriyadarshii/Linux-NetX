@@ -13,6 +13,7 @@ from .server import (
     value_error_handler,
     verify_api_key,
 )
+from .services.observability import request_context_middleware
 from .services.supervisor import g_supervisor
 from .utils import g_config
 from .utils.logger import setup_logging
@@ -44,6 +45,7 @@ app = FastAPI(
     contact={"name": "Linux-Net"},
     lifespan=lifespan,
 )
+app.middleware("http")(request_context_middleware)
 
 
 # Static files

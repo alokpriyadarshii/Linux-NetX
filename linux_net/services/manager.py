@@ -3,14 +3,13 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
+from redis.client import Pipeline
 from rq import Queue, Worker
 from rq.command import send_shutdown_command
 from rq.exceptions import InvalidJobOperation, NoSuchJobError
 from rq.job import Job
 from rq.registry import FailedJobRegistry, FinishedJobRegistry, StartedJobRegistry
 from rq.worker import BaseWorker
-
-from redis.client import Pipeline
 
 from ..models import (
     BatchFailedItem,
@@ -24,6 +23,7 @@ from ..models.response import JobInResponse, WorkerInResponse
 from ..plugins import schedulers
 from ..utils import g_config
 from ..utils.exceptions import JobOperationError, WorkerUnavailableError
+from .observability import current_job_trace_id, current_request_id, new_trace_id
 from .rediz import g_rdb
 from .rpc import (
     execute,
@@ -73,6 +73,55 @@ class Manager:
         except Exception:
             self._self_healing_baseline = 0
 
+    def _job_meta(self, meta: Optional[dict] = None) -> dict:
+        job_meta = dict(meta or JobAdditionalData().model_dump())
+        job_meta.setdefault("request_id", current_request_id() or new_trace_id("req"))
+        job_meta.setdefault("job_trace_id", current_job_trace_id() or new_trace_id("job"))
+        return job_meta
+
+    def _queue_runtime_snapshot(self, q_names: set[str], workers: list[BaseWorker]) -> list[dict]:
+        now = datetime.now(timezone.utc)
+        snapshots = []
+        for q_name in sorted(q_names):
+            q = Queue(q_name, connection=self.rdb)
+            queue_workers = [w for w in workers if q_name in w.queue_names()]
+            queued_jobs = q.count
+            started_jobs = StartedJobRegistry(queue=q).count
+            failed_jobs = FailedJobRegistry(queue=q).count
+
+            heartbeat_ages = []
+            for worker in queue_workers:
+                if worker.last_heartbeat is not None:
+                    heartbeat_ages.append(
+                        (now - worker.last_heartbeat.astimezone(timezone.utc)).total_seconds()
+                    )
+
+            oldest_job_age = 0.0
+            try:
+                oldest = q.get_jobs(length=1)
+                if oldest and oldest[0].enqueued_at:
+                    oldest_job_age = (
+                        now - oldest[0].enqueued_at.astimezone(timezone.utc)
+                    ).total_seconds()
+            except Exception as e:
+                log.debug(f"Unable to read oldest job for {q_name}: {e}")
+
+            snapshots.append(
+                {
+                    "name": q_name,
+                    "workers": len(queue_workers),
+                    "active_jobs": started_jobs,
+                    "queued_jobs": queued_jobs,
+                    "failed_jobs": failed_jobs,
+                    "worker_latency_seconds": round(max(heartbeat_ages), 3)
+                    if heartbeat_ages
+                    else 0,
+                    "oldest_job_age_seconds": round(oldest_job_age, 3),
+                    "backpressure_ratio": round(queued_jobs / max(1, len(queue_workers)), 3),
+                }
+            )
+        return snapshots
+
     def get_system_stats(self):
         """
         Aggregate connectivity and job execution stats from Redis.
@@ -121,6 +170,7 @@ class Manager:
             jobs_stats["in_progress"] += StartedJobRegistry(queue=q).count
             jobs_stats["queued"] += q.count
         jobs_stats["total"] = sum(jobs_stats.values())
+        jobs_stats["active"] = jobs_stats["in_progress"]
 
         nodes = self.get_all_nodes()
 
@@ -144,6 +194,26 @@ class Manager:
             },
             "self_healing": {
                 "total_triggers": healed_count,
+            },
+            "scheduling": {
+                "strategy": g_config.worker.scheduler,
+                "features": {
+                    "queue_backpressure": True,
+                    "job_priority": True,
+                    "rate_limiting_ready": True,
+                    "retry_with_exponential_backoff": True,
+                    "distributed_locks": True,
+                    "job_cancellation": True,
+                    "dead_letter_queue": True,
+                    "idempotency_keys": True,
+                },
+                "queues": self._queue_runtime_snapshot(q_names, workers),
+            },
+            "observability": {
+                "prometheus_metrics": True,
+                "structured_json_logs": True,
+                "request_id_propagation": True,
+                "job_trace_id": True,
             },
             "uptime_seconds": int((datetime.now(timezone.utc) - self.start_time).total_seconds()),
         }
@@ -304,7 +374,7 @@ class Manager:
             result_ttl=effective_result_ttl,  # result ttl in redis (from request or system default)
             failure_ttl=effective_result_ttl,  # errors ttl in redis
             kwargs=kwargs,
-            meta=meta if meta else JobAdditionalData().model_dump(),
+            meta=self._job_meta(meta),
             on_success=on_success_cb,
             on_failure=on_failure_cb,
             pipeline=pipeline,
@@ -352,7 +422,7 @@ class Manager:
                 result_ttl=effective_result_ttl,  # result ttl (from request or default)
                 failure_ttl=effective_result_ttl,  # errors ttl in redis
                 kwargs=kwargs,
-                meta=m if m else JobAdditionalData().model_dump(),
+                meta=self._job_meta(m),
                 on_success=on_success_cb,
                 on_failure=on_failure_cb,
             )
@@ -626,6 +696,7 @@ class Manager:
         # Generate task_id early if detach is requested
         if req.detach:
             import uuid
+
             meta.task_id = str(uuid.uuid4())[:12]
 
         # Add webhook handler
@@ -670,6 +741,7 @@ class Manager:
             import time
 
             from .rediz import g_detached_task_registry
+
             g_detached_task_registry.register(
                 meta.task_id,
                 {

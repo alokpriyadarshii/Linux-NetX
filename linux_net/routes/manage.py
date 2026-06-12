@@ -1,9 +1,11 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 
 from ..models.response import JobInResponse, SystemStatsResponse, WorkerInResponse
 from ..services.manager import g_mgr
+from ..services.observability import render_prometheus_metrics
 from ..utils import g_config
 
 router = APIRouter(tags=["manage"])
@@ -15,6 +17,29 @@ def get_system_stats():
     Get aggregated system performance and connectivity statistics.
     """
     return g_mgr.get_system_stats()
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+def get_prometheus_metrics():
+    """
+    Export controller, worker, queue, and scheduling metrics in Prometheus format.
+    """
+    return render_prometheus_metrics(g_mgr.get_system_stats())
+
+
+@router.get("/observability/dashboard")
+def get_worker_health_dashboard():
+    """
+    Return compact worker health, queue pressure, and tracing status for dashboards.
+    """
+    stats = g_mgr.get_system_stats()
+    return {
+        "status": stats["status"],
+        "workers": stats["workers"],
+        "jobs": stats["jobs"],
+        "scheduling": stats["scheduling"],
+        "observability": stats["observability"],
+    }
 
 
 @router.get("/jobs", response_model=List[JobInResponse])

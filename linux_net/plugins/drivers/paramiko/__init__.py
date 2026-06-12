@@ -162,9 +162,7 @@ class ParamikoDriver(BaseDriver):
                             _, stdout, _ = session.exec_command("echo 1", timeout=5)
                             if stdout.read().strip() != b"1":
                                 raise RuntimeError("Deep health check failed: invalid response")
-                            log.debug(
-                                f"Deep health check (channel verification) passed for {host}"
-                            )
+                            log.debug(f"Deep health check (channel verification) passed for {host}")
                     except Exception as e:
                         log.warning(f"Connection health check failed for {host}: {e}")
                         suicide = True

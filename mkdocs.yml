@@ -121,6 +121,7 @@ nav:
       - Driver System: en/architecture/driver-system.md
       - Template System: en/architecture/template-system.md
       - Scheduler System: en/architecture/scheduler-system.md
+      - Worker Pool and Observability: en/architecture/worker-pool-observability.md
       - Webhook System: en/architecture/webhook-system.md
   - Reference Manual:
       - Configuration Guide: en/reference/configuration-guide.md

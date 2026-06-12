@@ -55,6 +55,8 @@ class JobInResponse(BaseModel):
     worker: Optional[str] = None
     result: Optional[JobResult] = None
     task_id: Optional[str] = None
+    request_id: Optional[str] = None
+    job_trace_id: Optional[str] = None
     device_name: Optional[str] = None
     command: Optional[List[str]] = None
 
@@ -153,6 +155,8 @@ class JobInResponse(BaseModel):
             worker=job.worker_name,
             result=result,
             task_id=meta.task_id if meta else None,
+            request_id=meta.request_id if meta else None,
+            job_trace_id=meta.job_trace_id if meta else None,
             device_name=meta.device_name if meta else None,
             command=meta.command if meta else None,
         )
@@ -331,6 +335,8 @@ class SystemStatsResponse(BaseModel):
     jobs: dict = Field(default_factory=dict, description="Recent job volume and success rates")
     nodes: dict = Field(default_factory=dict, description="Compute node availability")
     self_healing: dict = Field(default_factory=dict, description="Recovery statistics")
+    scheduling: dict = Field(default_factory=dict, description="Queue pressure and scheduler state")
+    observability: dict = Field(default_factory=dict, description="Trace and logging features")
     uptime_seconds: int = Field(0, description="Process uptime")
 
     model_config = ConfigDict(

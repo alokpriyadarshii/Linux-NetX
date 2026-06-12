@@ -1,13 +1,18 @@
-name: Ruff
+name: Quality
 
 on:
   push:
-    branches: ["master"]
+    branches: ["main", "master"]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint:
+  python-quality:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     steps:
@@ -17,16 +22,59 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.12"
 
-      - name: Install Ruff
-        run: pip install ruff
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[dev,api]"
 
-      - name: Format code
-        run: ruff --config pyproject.toml format .
+      - name: Check formatting
+        run: ruff --config pyproject.toml format --check .
 
-      - name: Fix lint issues
-        run: ruff --config pyproject.toml check --fix --exit-zero .
-
-      - name: Ensure no remaining lint issues
+      - name: Lint
         run: ruff --config pyproject.toml check .
+
+      - name: Type check
+        run: mypy
+
+      - name: Run unit tests with coverage threshold
+        run: pytest tests/unit --cov=linux_net --cov-fail-under=45
+
+      - name: Security scan
+        run: bandit -c pyproject.toml linux_net/controller.py linux_net/routes/manage.py linux_net/services/observability.py
+
+  linux-agent:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure C++ agent
+        run: cmake -S linux_net_agent -B linux_net_agent/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build C++ agent
+        run: cmake --build linux_net_agent/build --parallel
+
+  packaging:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Docker image build test
+        run: docker build -f docker/controller.dockerfile .
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm chart lint
+        run: helm lint deploy/charts/linux-net
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Kubernetes manifest validation
+        run: kubectl apply --dry-run=client --validate=false -f deploy/k8s

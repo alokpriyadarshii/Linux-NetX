@@ -69,6 +69,8 @@ api = [
 tool = ["pandas~=2.2", "openpyxl~=3.1", "rich~=13.0"]
 dev = [
     "ruff>=0.11.0",
+    "mypy>=1.15.0",
+    "bandit[toml]>=1.8.0",
     "mkdocs-material~=9.6.0",
     "mkdocs-static-i18n~=1.3.0",
     "pytest~=8.3.0",
@@ -109,6 +111,23 @@ respect-gitignore = true
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "RUF", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+files = [
+    "linux_net/controller.py",
+    "linux_net/routes/manage.py",
+    "linux_net/services/observability.py",
+]
+follow_imports = "skip"
+ignore_missing_imports = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = false
+
+[tool.bandit]
+exclude_dirs = ["tests", "linux_net_agent/build"]
+skips = ["B101", "B404", "B603", "B607"]
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"

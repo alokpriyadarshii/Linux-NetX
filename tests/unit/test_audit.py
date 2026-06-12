@@ -27,9 +27,11 @@ def mock_mongo(monkeypatch):
 
     # Patch the module-level client so _get_mongo_client() returns the mock,
     # and enable MongoDB so _write_to_mongo() doesn't short-circuit.
-    with patch("linux_net.worker.archiver.MongoClient", return_value=mock_client), \
-         patch("linux_net.worker.archiver._mongo_client", mock_client), \
-         patch("linux_net.worker.archiver.g_config.mongodb.enabled", True):
+    with (
+        patch("linux_net.worker.archiver.MongoClient", return_value=mock_client),
+        patch("linux_net.worker.archiver._mongo_client", mock_client),
+        patch("linux_net.worker.archiver.g_config.mongodb.enabled", True),
+    ):
         yield mock_collection
 
 
@@ -76,13 +78,16 @@ def test_rpc_audit_callback_skips_when_audit_mode_none(unit_runtime):
 
     class SimpleJob:
         id = "test-job-id"
-        kwargs = {"req": MagicMock(audit_mode="none")}
+
+        def __init__(self):
+            self.kwargs = {"req": MagicMock(audit_mode="none")}
 
     conn = unit_runtime.redis
     with patch("linux_net.services.audit.g_config.mongodb.enabled", True):
         rpc_audit_callback(SimpleJob(), conn, "test-result")
 
     assert Queue("AuditLogQ", connection=conn).count == 0
+
 
 def test_process_audit_log_persists(mock_mongo, monkeypatch, unit_runtime):
     # Mock Job.fetch
@@ -163,6 +168,7 @@ def test_process_audit_log_full_keeps_complete_result(mock_mongo, unit_runtime):
     assert doc["audit_mode"] == "full"
     assert doc["result"] == result
 
+
 def test_process_detached_audit(mock_mongo, unit_runtime):
     task_id = "detach-123"
     metadata = {"status": "running", "foo": "bar"}
@@ -176,6 +182,7 @@ def test_process_detached_audit(mock_mongo, unit_runtime):
     assert doc["metadata"]["status"] == "running"
     assert doc["metadata"]["foo"] == "bar"
     assert "recorded_at" in doc
+
 
 def test_prune_collection_by_count_deletes_oldest_records():
     collection = MagicMock()
@@ -206,9 +213,7 @@ def test_prune_collection_by_count_deletes_in_batches():
     _prune_collection_by_count(collection, max_documents=3, batch_size=3)
 
     collection.find.return_value.sort.return_value.limit.assert_called_once_with(3)
-    collection.delete_many.assert_called_once_with(
-        {"_id": {"$in": ["old-0", "old-1", "old-2"]}}
-    )
+    collection.delete_many.assert_called_once_with({"_id": {"$in": ["old-0", "old-1", "old-2"]}})
 
 
 def test_ensure_ttl_index_failure_does_not_raise():

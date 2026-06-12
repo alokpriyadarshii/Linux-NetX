@@ -3,6 +3,7 @@ name: test-containerlab
 on:
   push:
     branches:
+      - main
       - master
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
@@ -47,7 +48,7 @@ jobs:
         env:
           SRL_EULA_ACCEPT: "true"
         run: |
-          pytest --cov=linux_net
+          pytest --cov=linux_net --cov-fail-under=45
 
       - name: Destroy Containerlab topology
         if: always()

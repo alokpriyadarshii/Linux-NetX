@@ -465,6 +465,7 @@ def rpc_webhook_callback(*args):
     # Audit log (moved from Manager for RQ compatibility)
     if g_config.mongodb.enabled:
         from .audit import rpc_audit_callback
+
         try:
             rpc_audit_callback(*args)
         except Exception as e:
@@ -510,14 +511,14 @@ def rpc_webhook_callback(*args):
                     # Skip webhook if task was cleared or is a redundant query
                     # for an already-completed task.
                     from .rediz import g_detached_task_registry
+
                     task_meta = g_detached_task_registry.get(task_id) if task_id else None
                     if task_meta is None:
                         # Task cleared from registry — skip
                         log.debug(f"Skipping webhook for cleared task {task_id}")
                         return
-                    if (
-                        task_meta.get("status") == "completed"
-                        and (not result or (isinstance(result, list) and len(result) == 0))
+                    if task_meta.get("status") == "completed" and (
+                        not result or (isinstance(result, list) and len(result) == 0)
                     ):
                         # Task already completed AND this job returned empty
                         # (redundant query) — skip
@@ -550,7 +551,6 @@ def rpc_webhook_callback(*args):
 
     # --- New: Transform Local Paths to Download URLs ---
     if is_success and isinstance(result, list):
-
         staging_dir = str(g_config.storage.staging)
         download_base = os.path.join(staging_dir, "downloads")
 
@@ -646,6 +646,7 @@ def rpc_exception_callback(
     # Audit log (moved from Manager for RQ compatibility)
     if g_config.mongodb.enabled:
         from .audit import rpc_audit_callback
+
         try:
             rpc_audit_callback(job, conn, exc_type, exc_value, tb)
         except Exception as e:

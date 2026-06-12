@@ -251,7 +251,7 @@ class NetmikoDriver(BaseDriver):
                 for cmd in command:
                     start_time = time.perf_counter()
                     cmd_args = {
-                        "cmd_verify": False,   # Don't verify command echo
+                        "cmd_verify": False,  # Don't verify command echo
                         "read_timeout": 30.0,  # 10s default is too short for large outputs
                     }
                     if self.args:
