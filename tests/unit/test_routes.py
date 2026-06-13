@@ -437,3 +437,18 @@ def test_kill_worker_by_name(monkeypatch, app_config):
     assert resp.status_code == 200
     assert stub.calls["kill_worker"] == ("worker-1", None)
     assert resp.json()["name"] == "worker-1"
+
+
+def test_dashboard_page_served():
+    client = TestClient(controller.app)
+
+    resp = client.get("/dashboard")
+
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "Linux-Net Controller" in resp.text
+    assert 'data-view="Workers"' in resp.text
+    assert 'href="#workers"' in resp.text
+    assert "[hidden]" in resp.text
+    assert "function trafficView" in resp.text
+    assert "function requestLogsView" in resp.text

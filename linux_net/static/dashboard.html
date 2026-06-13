@@ -1,0 +1,1749 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Linux-Net Performance</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --accent: #079c9a;
+        --accent-dark: #078d8b;
+        --blue: #2689d6;
+        --purple: #7550d8;
+        --ink: #333840;
+        --muted: #8a9296;
+        --soft: #f7f7f8;
+        --line: #dedfe2;
+        --sidebar: #f2eff5;
+        --danger: #c75b63;
+        --panel: #ffffff;
+        --panel-2: #f7f8f8;
+        --bar-warn: #d79a9d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      body {
+        margin: 0;
+        background: var(--soft);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 15px;
+        letter-spacing: 0;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      select {
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: inherit;
+        max-width: 110px;
+      }
+
+      .app-shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 230px minmax(0, 1fr);
+      }
+
+      .sidebar {
+        background: var(--sidebar);
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .brand {
+        height: 78px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 24px;
+        font-size: 23px;
+        font-weight: 750;
+      }
+
+      .brand-mark {
+        width: 31px;
+        height: 31px;
+        border-radius: 7px;
+        background: #126f6d;
+        color: white;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .nav {
+        padding: 14px 10px;
+        display: grid;
+        gap: 4px;
+      }
+
+      .nav-item {
+        min-height: 43px;
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        align-items: center;
+        gap: 10px;
+        padding: 0 14px;
+        border-radius: 6px;
+        color: #555b62;
+        text-decoration: none;
+        font-size: 17px;
+      }
+
+      .nav-item.active {
+        background: #e7e1ea;
+        color: #262a30;
+      }
+
+      .nav-item:focus {
+        outline: none;
+      }
+
+      .nav-item:focus-visible {
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+
+      .nav-icon {
+        color: #555b62;
+        font-size: 18px;
+        text-align: center;
+      }
+
+      .nav-item.active .nav-icon {
+        color: var(--accent);
+      }
+
+      .sidebar-bottom {
+        margin-top: auto;
+        border-top: 1px solid var(--line);
+      }
+
+      .user-chip {
+        min-height: 56px;
+        display: grid;
+        grid-template-columns: 37px minmax(0, 1fr) 14px;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-top: 1px solid var(--line);
+        color: var(--ink);
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .user-chip:hover,
+      .user-chip:focus-visible {
+        background: #e9e5ec;
+        outline: none;
+      }
+
+      .user-arrow {
+        color: #aab3b1;
+        font-size: 24px;
+        line-height: 1;
+        text-align: right;
+      }
+
+      .avatar {
+        width: 37px;
+        height: 37px;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 50% 35%, #f1c2a7 0 16%, transparent 17%),
+          radial-gradient(circle at 43% 31%, #3b2f2b 0 9%, transparent 10%),
+          linear-gradient(160deg, transparent 0 45%, #ffffff 46% 63%, transparent 64%),
+          linear-gradient(135deg, #98d7ef, #e9f3ef 48%, #83b66f);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+
+      .user-name {
+        font-weight: 700;
+        font-size: 14px;
+        line-height: 1.1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .user-org,
+      .made {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .user-org {
+        line-height: 1.25;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .made {
+        padding: 14px 24px;
+      }
+
+      .main {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .topbar {
+        min-height: 78px;
+        background: #ffffff;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 0 30px;
+      }
+
+      .crumbs {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-width: 0;
+        font-size: 22px;
+      }
+
+      .crumbs strong {
+        font-weight: 800;
+      }
+
+      .chevron {
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      .app-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        border-bottom: 1px dotted #aab0b3;
+      }
+
+      .pill {
+        border: 1px solid var(--accent);
+        color: var(--accent-dark);
+        border-radius: 999px;
+        padding: 2px 9px;
+        font-size: 14px;
+        font-weight: 700;
+        background: transparent;
+        white-space: nowrap;
+      }
+
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .control {
+        height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #ffffff;
+        color: #5f666b;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        white-space: nowrap;
+      }
+
+      .filter-button {
+        cursor: pointer;
+      }
+
+      .filter-wrap {
+        position: relative;
+      }
+
+      .filter-panel {
+        position: absolute;
+        top: calc(100% + 10px);
+        right: 0;
+        z-index: 10;
+        width: min(360px, calc(100vw - 32px));
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-top: 4px solid var(--accent);
+        border-radius: 6px;
+        background: #ffffff;
+        box-shadow: 0 18px 38px rgba(36, 42, 48, 0.14);
+        display: grid;
+        gap: 10px;
+      }
+
+      .filter-label {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .filter-input {
+        height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #ffffff;
+        color: var(--ink);
+        padding: 0 11px;
+        outline: 0;
+      }
+
+      .filter-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .filter-count {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .filter-reset {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--ink);
+        height: 32px;
+        padding: 0 10px;
+        cursor: pointer;
+      }
+
+      .refresh {
+        width: 44px;
+        justify-content: center;
+        background: var(--accent);
+        color: #ffffff;
+        border-color: var(--accent);
+        cursor: pointer;
+        font-weight: 900;
+      }
+
+      .content {
+        padding: 24px 28px 34px;
+        display: grid;
+        gap: 24px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-top: 4px solid var(--accent);
+        border-radius: 6px;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(36, 42, 48, 0.08);
+      }
+
+      .chart-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+
+      .metric {
+        min-width: 0;
+        padding: 16px 20px 14px;
+      }
+
+      .metric + .metric {
+        border-left: 1px solid var(--line);
+      }
+
+      .metric-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .metric-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .help {
+        width: 15px;
+        height: 15px;
+        border: 1px solid #c9ced0;
+        border-radius: 50%;
+        display: inline-grid;
+        place-items: center;
+        font-size: 10px;
+      }
+
+      .menu-dot {
+        color: #adb4b7;
+        font-weight: 900;
+      }
+
+      .metric-value {
+        margin-top: 6px;
+        font-size: 34px;
+        line-height: 1.1;
+        font-weight: 750;
+      }
+
+      .mood {
+        color: #7f888c;
+      }
+
+      .chart {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 620 / 242;
+        display: block;
+        margin-top: 10px;
+      }
+
+      .chart text {
+        fill: #a0a7aa;
+        font-size: 12px;
+      }
+
+      .grid-line {
+        stroke: #e5e8e9;
+        stroke-width: 1;
+      }
+
+      .table-search {
+        height: 50px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 18px;
+        border-bottom: 1px solid var(--line);
+        color: #aab2b5;
+        font-size: 17px;
+      }
+
+      .search-input {
+        border: 0;
+        outline: 0;
+        width: 100%;
+        min-width: 0;
+        background: transparent;
+        color: var(--ink);
+      }
+
+      .search-input::placeholder {
+        color: #b3b9bc;
+      }
+
+      .endpoint-table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+
+      .endpoint-table th,
+      .endpoint-table td {
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        height: 49px;
+        padding: 0 14px;
+        white-space: nowrap;
+      }
+
+      .endpoint-table th {
+        font-size: 16px;
+        font-weight: 800;
+        background: var(--panel);
+      }
+
+      .endpoint-table td {
+        font-size: 17px;
+      }
+
+      .endpoint-col {
+        width: 44%;
+      }
+
+      .small-col {
+        width: 11%;
+      }
+
+      .score-col {
+        width: 15%;
+      }
+
+      .slow-col {
+        width: 16%;
+      }
+
+      .endpoint-cell {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        min-width: 0;
+      }
+
+      .expand {
+        color: #b0b6b9;
+        font-size: 24px;
+        line-height: 1;
+      }
+
+      .method {
+        min-width: 58px;
+        height: 22px;
+        border-radius: 6px;
+        color: white;
+        display: inline-grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .GET {
+        background: var(--accent);
+      }
+
+      .POST {
+        background: var(--blue);
+      }
+
+      .PUT,
+      .PATCH {
+        background: var(--purple);
+      }
+
+      .DELETE {
+        background: var(--danger);
+      }
+
+      .path {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .param {
+        color: #b8797d;
+      }
+
+      .score-cell {
+        background:
+          linear-gradient(90deg, rgba(7, 156, 154, 0.12) var(--fill), transparent var(--fill)),
+          var(--panel);
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .row-menu {
+        text-align: right;
+        color: #b3b9bc;
+        font-weight: 900;
+      }
+
+      .status-line {
+        min-height: 22px;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 0 2px;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .stat-card,
+      .list-panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-top: 4px solid var(--accent);
+        border-radius: 6px;
+        padding: 18px;
+        box-shadow: 0 1px 2px rgba(36, 42, 48, 0.08);
+      }
+
+      .stat-label {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .stat-value {
+        margin-top: 8px;
+        font-size: 30px;
+        line-height: 1.1;
+        font-weight: 800;
+      }
+
+      .detail-list {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .detail-list th,
+      .detail-list td {
+        height: 48px;
+        border-bottom: 1px solid var(--line);
+        padding: 0 12px;
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      .detail-list th {
+        font-size: 14px;
+        color: var(--muted);
+        font-weight: 800;
+      }
+
+      .detail-list td {
+        font-size: 16px;
+      }
+
+      .empty-state {
+        padding: 38px 18px;
+        color: var(--muted);
+        text-align: center;
+        font-size: 15px;
+      }
+
+      .section-title {
+        margin: 0 0 14px;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .state-pill {
+        border-radius: 999px;
+        padding: 3px 9px;
+        background: #d9efee;
+        color: var(--accent-dark);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .kpi-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        border-bottom: 1px solid var(--line);
+      }
+
+      .kpi {
+        min-height: 78px;
+        padding: 16px 18px;
+        border-right: 1px solid var(--line);
+      }
+
+      .kpi:last-child {
+        border-right: 0;
+      }
+
+      .kpi-label {
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .kpi-value {
+        margin-top: 4px;
+        font-size: 28px;
+        line-height: 1.1;
+        font-weight: 800;
+      }
+
+      .bar-panel {
+        padding: 16px 18px 12px;
+      }
+
+      .bar-title {
+        text-align: center;
+        color: var(--muted);
+        font-weight: 800;
+        margin-bottom: 10px;
+      }
+
+      .bar-chart {
+        height: 185px;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        align-items: end;
+        gap: 8px;
+        border-bottom: 1px solid var(--line);
+        background: repeating-linear-gradient(
+          to top,
+          transparent,
+          transparent 25px,
+          rgba(31, 41, 45, 0.06) 26px
+        );
+        padding: 0 14px;
+      }
+
+      .bar {
+        min-width: 8px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
+
+      .bar-main {
+        background: var(--accent);
+        border-radius: 3px 3px 0 0;
+      }
+
+      .bar-error,
+      .bar-client {
+        background: var(--bar-warn);
+        border-radius: 3px 3px 0 0;
+      }
+
+      .bar-labels {
+        display: grid;
+        grid-template-columns: repeat(13, 1fr);
+        padding: 8px 18px 0;
+        color: #a0a7aa;
+        font-size: 12px;
+      }
+
+      .status-code {
+        min-width: 42px;
+        height: 20px;
+        border-radius: 5px;
+        border: 1px solid #9b4d54;
+        color: #d97980;
+        display: inline-grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .status-code.ok {
+        border-color: var(--accent);
+        color: var(--accent-dark);
+      }
+
+      .log-request {
+        display: grid;
+        gap: 3px;
+      }
+
+      .log-meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .mini-bars {
+        height: 92px;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        gap: 4px;
+        align-items: end;
+        padding: 16px 26px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .mini-bar {
+        background: #d4dada;
+        border-radius: 2px 2px 0 0;
+      }
+
+      @media (max-width: 1050px) {
+        .app-shell {
+          grid-template-columns: 72px minmax(0, 1fr);
+        }
+
+        .brand span,
+        .nav-label,
+        .sidebar-bottom,
+        .user-chip,
+        .made {
+          display: none;
+        }
+
+        .brand {
+          justify-content: center;
+          padding: 0;
+        }
+
+        .nav-item {
+          grid-template-columns: 1fr;
+          justify-items: center;
+          padding: 0;
+        }
+
+        .topbar {
+          align-items: stretch;
+          height: auto;
+          flex-direction: column;
+          padding: 16px 20px;
+        }
+
+        .controls {
+          flex-wrap: wrap;
+        }
+
+        .filter-button {
+          justify-content: center;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .app-shell {
+          display: block;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .content {
+          padding: 16px;
+        }
+
+        .chart-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .summary-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .kpi-strip {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .bar-chart {
+          gap: 4px;
+          padding: 0 8px;
+        }
+
+        .metric + .metric {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+
+        .endpoint-table {
+          min-width: 780px;
+        }
+
+        .table-wrap {
+          overflow-x: auto;
+        }
+
+        .detail-list {
+          min-width: 620px;
+        }
+
+        .crumbs {
+          font-size: 19px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand"><div class="brand-mark">NX</div><span>LINUX-NET</span></div>
+        <nav class="nav">
+          <a class="nav-item" href="#apps" data-view="Apps"><span class="nav-icon">⌂</span><span class="nav-label">Apps</span></a>
+          <a class="nav-item" href="#traffic" data-view="Traffic"><span class="nav-icon">▥</span><span class="nav-label">Traffic</span></a>
+          <a class="nav-item" href="#errors" data-view="Errors"><span class="nav-icon">✣</span><span class="nav-label">Errors</span></a>
+          <a class="nav-item active" href="#performance" data-view="Performance" aria-current="page"><span class="nav-icon">ϟ</span><span class="nav-label">Performance</span></a>
+          <a class="nav-item" href="#workers" data-view="Workers"><span class="nav-icon">◉</span><span class="nav-label">Workers</span></a>
+          <a class="nav-item" href="#request-logs" data-view="Request logs"><span class="nav-icon">▣</span><span class="nav-label">Request logs</span></a>
+          <a class="nav-item" href="#resources" data-view="Resources"><span class="nav-icon">▧</span><span class="nav-label">Resources</span></a>
+          <a class="nav-item" href="#uptime" data-view="Uptime"><span class="nav-icon">♥</span><span class="nav-label">Uptime</span></a>
+          <a class="nav-item" href="#alerts" data-view="Alerts"><span class="nav-icon">●</span><span class="nav-label">Alerts</span></a>
+        </nav>
+        <div class="sidebar-bottom">
+          <nav class="nav">
+            <a class="nav-item" href="#whats-new" data-view="What's new"><span class="nav-icon">✦</span><span class="nav-label">What's new</span></a>
+            <a class="nav-item" href="#get-in-touch" data-view="Get in touch"><span class="nav-icon">●</span><span class="nav-label">Get in touch</span></a>
+            <a class="nav-item" href="#settings" data-view="Settings"><span class="nav-icon">⚙</span><span class="nav-label">Settings</span></a>
+          </nav>
+          <a class="user-chip" href="#settings" data-view="Settings" aria-label="Open Alok Priyadarshi account settings">
+            <div class="avatar" aria-hidden="true"></div>
+            <div><div class="user-name">Alok Priyadarshi</div><div class="user-org">Cosmic Code</div></div>
+            <div class="user-arrow">›</div>
+          </a>
+          <div class="made">Made for automation teams</div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="crumbs">
+            <strong id="page-title">Performance</strong>
+            <span class="chevron">›</span>
+            <span class="app-name">Linux-Net Controller</span>
+            <span id="mode-pill" class="pill">Live</span>
+          </div>
+          <div class="controls">
+            <div class="control">◴ <select id="range" aria-label="Time range"><option>24 hours</option><option>7 days</option><option>30 days</option></select></div>
+            <div class="control">▨ <select id="env" aria-label="Environment"><option>All envs</option><option>Production</option><option>Development</option></select></div>
+            <div class="filter-wrap">
+              <button id="filter" class="control filter-button" type="button" aria-label="Filter" aria-expanded="false" aria-controls="filter-panel">▽ Filter</button>
+              <div id="filter-panel" class="filter-panel" hidden>
+                <label class="filter-label" for="global-filter">Filter current table</label>
+                <input id="global-filter" class="filter-input" type="search" autocomplete="off" placeholder="Endpoint, worker, queue, status..." />
+                <div class="filter-actions">
+                  <span id="filter-count" class="filter-count">Showing all rows</span>
+                  <button id="filter-reset" class="filter-reset" type="button">Reset</button>
+                </div>
+              </div>
+            </div>
+            <button id="refresh" class="control refresh" aria-label="Refresh">↻</button>
+          </div>
+        </header>
+
+        <section id="performance-view" class="content">
+          <div class="panel chart-grid">
+            <article class="metric">
+              <div class="metric-head">
+                <span class="metric-title">Apdex score <span class="help">?</span></span>
+                <span class="menu-dot">⋮</span>
+              </div>
+              <div class="metric-value"><span id="apdex-value">0.835</span> <span class="mood">☻</span></div>
+              <svg id="apdex-chart" class="chart" viewBox="0 0 620 242" role="img" aria-label="Apdex score chart"></svg>
+            </article>
+            <article class="metric">
+              <div class="metric-head">
+                <span class="metric-title">Queue latency (p95) <span class="help">?</span></span>
+                <span class="menu-dot">⋮</span>
+              </div>
+              <div class="metric-value"><span id="latency-value">300 ms</span></div>
+              <svg id="latency-chart" class="chart" viewBox="0 0 620 242" role="img" aria-label="Latency chart"></svg>
+            </article>
+          </div>
+
+          <div class="status-line" id="status-line"></div>
+
+          <section class="panel">
+            <div class="table-search">
+              <span>⌕</span>
+              <input id="search" class="search-input" placeholder="Search endpoints" />
+            </div>
+            <div class="table-wrap">
+              <table class="endpoint-table">
+                <thead>
+                  <tr>
+                    <th class="endpoint-col">Endpoint</th>
+                    <th class="score-col">Apdex score ▲</th>
+                    <th class="slow-col">Slow requests</th>
+                    <th class="small-col">p50</th>
+                    <th class="small-col">p75</th>
+                    <th class="small-col">p95</th>
+                    <th style="width: 42px"></th>
+                  </tr>
+                </thead>
+                <tbody id="endpoint-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="section-view" class="content" hidden></section>
+      </main>
+    </div>
+
+    <script>
+      const demoRows = [
+        ["GET", "/health", 0.978, "0 / 182", 18, 34, 48],
+        ["GET", "/system/stats", 0.941, "2 / 211", 42, 66, 90],
+        ["GET", "/workers", 0.918, "4 / 118", 58, 88, 130],
+        ["GET", "/jobs", 0.892, "7 / 148", 82, 136, 190],
+        ["POST", "/device/exec", 0.835, "18 / 67", 160, 220, 300],
+        ["POST", "/device/bulk", 0.812, "21 / 54", 190, 250, 340],
+        ["POST", "/template/render/jinja2", 0.876, "6 / 93", 72, 110, 170],
+        ["GET", "/detached-tasks/{task_id}", 0.903, "5 / 76", 95, 130, 210],
+        ["DELETE", "/jobs/{job_id}", 0.928, "1 / 22", 55, 84, 120],
+      ];
+
+      const apdexSeries = [0.89, 0.67, 0.70, 0.86, 0.87, 0.82, 0.82, 0.83, 0.79, 0.82, 0.82, 0.82, 0.84, 0.87, 0.85, 0.86, 0.90, 0.91, 0.87, 0.88, 0.88, 0.89, 0.92, 0.91];
+      const latencyBands = [
+        [180, 360, 430, 440, 265, 270, 276, 285, 285, 300, 288, 290, 290, 265, 265, 255, 260, 260, 245, 248, 260, 252, 250, 235],
+        [160, 315, 315, 285, 175, 185, 200, 205, 210, 220, 218, 218, 218, 200, 190, 198, 200, 180, 185, 200, 184, 185, 182, 180],
+        [150, 210, 205, 170, 165, 170, 170, 172, 175, 180, 168, 170, 170, 165, 155, 160, 162, 150, 150, 162, 150, 150, 148, 146],
+      ];
+
+      const $ = (selector) => document.querySelector(selector);
+      const viewLinks = () => document.querySelectorAll(".nav-item[data-view], .user-chip[data-view]");
+      const statusLine = $("#status-line");
+      const modePill = $("#mode-pill");
+      const pageTitle = $("#page-title");
+      const performanceView = $("#performance-view");
+      const sectionView = $("#section-view");
+      let currentView = "Performance";
+      let currentRows = demoRows;
+      let currentStats = { status: "demo", workers: { total: 4 }, jobs: { queued: 0 } };
+      let currentWorkers = [];
+      let currentJobs = [];
+      let currentLive = false;
+      let filterQuery = "";
+
+      const apiKey = new URLSearchParams(window.location.search).get("api_key")
+        || new URLSearchParams(window.location.search).get("X-API-KEY")
+        || localStorage.getItem("linuxNetApiKey")
+        || "";
+
+      function fmtMs(value) {
+        return `${Math.round(value)} ms`;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function formatPath(path) {
+        return escapeHtml(path).replaceAll(/\{([^}]+)\}/g, '<span class="param">{$1}</span>');
+      }
+
+      function buildPath(points, width, height, min, max) {
+        return points.map((point, index) => {
+          const x = (index / (points.length - 1)) * width;
+          const y = height - ((point - min) / (max - min)) * height;
+          return `${index === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(" ");
+      }
+
+      function buildArea(points, width, height, min, max) {
+        const line = buildPath(points, width, height, min, max);
+        return `${line} L${width},${height} L0,${height} Z`;
+      }
+
+      function offsetPath(path, left, top) {
+        return path.replaceAll(/([ML])([0-9.]+),([0-9.]+)/g, (_, cmd, x, y) => `${cmd}${Number(x) + left},${Number(y) + top}`);
+      }
+
+      function drawApdex(values) {
+        const svg = $("#apdex-chart");
+        const left = 48;
+        const top = 12;
+        const chartW = 548;
+        const chartH = 172;
+        const y = (value) => top + chartH - ((value - 0.5) / 0.5) * chartH;
+        const path = offsetPath(buildPath(values, chartW, chartH, 0.5, 1), left, top);
+
+        svg.innerHTML = `
+          <rect x="${left}" y="${y(1)}" width="${chartW}" height="${y(0.85) - y(1)}" fill="#d9f1ef"></rect>
+          <rect x="${left}" y="${y(0.85)}" width="${chartW}" height="${y(0.7) - y(0.85)}" fill="#f0f1f2"></rect>
+          <rect x="${left}" y="${y(0.7)}" width="${chartW}" height="${y(0.5) - y(0.7)}" fill="#fae9eb"></rect>
+          ${[1, 0.93, 0.85, 0.7, 0.5].map((tick) => `<line class="grid-line" x1="${left}" x2="${left + chartW}" y1="${y(tick)}" y2="${y(tick)}"></line><text x="10" y="${y(tick) + 4}">${tick}</text>`).join("")}
+          <path d="${path}" fill="none" stroke="#5f6866" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="${path}" fill="none" stroke="#0b9a9a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="356 999"></path>
+          <path d="${path}" fill="none" stroke="#c75b63" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="70 999"></path>
+          ${["14:00", "16:00", "18:00", "20:00", "22:00", "00:00", "02:00", "04:00", "06:00", "08:00", "10:00", "12:00", "14:00"].map((label, i) => `<text x="${left + (i / 12) * chartW - 14}" y="208">${label}</text>`).join("")}
+        `;
+      }
+
+      function drawLatency(bands) {
+        const svg = $("#latency-chart");
+        const left = 52;
+        const top = 12;
+        const chartW = 540;
+        const chartH = 172;
+        const min = 0;
+        const max = 450;
+        const area1 = offsetPath(buildArea(bands[0], chartW, chartH, min, max), left, top);
+        const area2 = offsetPath(buildArea(bands[1], chartW, chartH, min, max), left, top);
+        const area3 = offsetPath(buildArea(bands[2], chartW, chartH, min, max), left, top);
+        const y = (value) => top + chartH - ((value - min) / (max - min)) * chartH;
+
+        svg.innerHTML = `
+          ${[450, 400, 350, 300, 250, 200, 150, 100, 50, 0].map((tick) => `<line class="grid-line" x1="${left}" x2="${left + chartW}" y1="${y(tick)}" y2="${y(tick)}"></line><text x="2" y="${y(tick) + 4}">${tick} ms</text>`).join("")}
+          <path d="${area1}" fill="#bfe8e6" opacity="0.95"></path>
+          <path d="${area2}" fill="#45b8b4" opacity="0.62"></path>
+          <path d="${area3}" fill="#079996" opacity="0.88"></path>
+          <line x1="${left}" x2="${left + chartW}" y1="${y(200)}" y2="${y(200)}" stroke="#d68b8b" stroke-width="1.5"></line>
+          <rect x="${left + 4}" y="${y(200) - 15}" width="68" height="19" rx="5" fill="#ffffff" stroke="#9b4d54"></rect>
+          <text x="${left + 9}" y="${y(200) - 1}" fill="#697077">Threshold</text>
+          ${["14:00", "16:00", "18:00", "20:00", "22:00", "00:00", "02:00", "04:00", "06:00", "08:00", "10:00", "12:00", "14:00"].map((label, i) => `<text x="${left + (i / 12) * chartW - 14}" y="208">${label}</text>`).join("")}
+        `;
+      }
+
+      function renderRows(rows) {
+        const query = filterQuery;
+        const body = $("#endpoint-body");
+        body.innerHTML = rows
+          .filter((row) => row.join(" ").toLowerCase().includes(query))
+          .map(([method, path, score, slow, p50, p75, p95]) => `
+            <tr>
+              <td>
+                <div class="endpoint-cell">
+                  <span class="expand">›</span>
+                  <span class="method ${method}">${method}</span>
+                  <span class="path">${formatPath(path)}</span>
+                </div>
+              </td>
+              <td class="score-cell" style="--fill: ${Math.max(12, Math.round(score * 100))}%">${score.toFixed(3)}</td>
+              <td>${slow}</td>
+              <td>${fmtMs(p50)}</td>
+              <td>${fmtMs(p75)}</td>
+              <td>${fmtMs(p95)}</td>
+              <td class="row-menu">⋮</td>
+            </tr>
+          `).join("");
+        updateFilterCount();
+      }
+
+      function uptimeText(seconds) {
+        const value = Number(seconds || 0);
+        const days = Math.floor(value / 86400);
+        const hours = Math.floor((value % 86400) / 3600);
+        const minutes = Math.floor((value % 3600) / 60);
+        if (days > 0) {
+          return `${days}d ${hours}h`;
+        }
+        if (hours > 0) {
+          return `${hours}h ${minutes}m`;
+        }
+        return `${minutes}m`;
+      }
+
+      function num(value) {
+        return Number(value || 0);
+      }
+
+      function percent(part, total) {
+        if (!total) {
+          return "0.0 %";
+        }
+        return `${((part / total) * 100).toFixed(1)} %`;
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function state(value) {
+        return `<span class="state-pill">${escapeHtml(value)}</span>`;
+      }
+
+      function emptyState(message) {
+        return `<tr><td colspan="8"><div class="empty-state">${escapeHtml(message)}</div></td></tr>`;
+      }
+
+      function workerStatus(worker, stats = {}, index = 0) {
+        if (worker.status && worker.status !== "?") {
+          return worker.status;
+        }
+        if (index < num(stats.workers?.idle)) {
+          return "idle";
+        }
+        if (index < num(stats.workers?.idle) + num(stats.workers?.busy)) {
+          return "busy";
+        }
+        return "registered";
+      }
+
+      function queueRows(stats) {
+        return stats.scheduling?.queues || [];
+      }
+
+      function featureRows(stats) {
+        return Object.entries(stats.scheduling?.features || {}).map(([name, enabled]) => [
+          escapeHtml(name.replaceAll("_", " ")),
+          state(enabled ? "enabled" : "disabled"),
+          enabled ? "ready" : "off",
+        ]);
+      }
+
+      function endpointCell(method, path) {
+        return `<div class="endpoint-cell"><span class="expand">›</span><span class="method ${method}">${escapeHtml(method)}</span><span class="path">${formatPath(path)}</span></div>`;
+      }
+
+      const demoTrafficRows = [
+        ["GET", "/health", "420", "0.0 %", "live health probe sample"],
+        ["GET", "/system/stats", "318", "0.0 %", "controller stats sample"],
+        ["GET", "/workers", "246", "0.0 %", "worker inventory sample"],
+        ["GET", "/jobs", "184", "1.1 %", "queue polling sample"],
+        ["POST", "/device/exec", "72", "2.8 %", "device execution sample"],
+        ["POST", "/device/bulk", "38", "5.3 %", "bulk execution sample"],
+        ["POST", "/template/render/jinja2", "31", "0.0 %", "template render sample"],
+        ["GET", "/observability/dashboard", "128", "0.0 %", "dashboard sample"],
+      ];
+
+      const demoErrorRows = [
+        ["JOB", "device-ssh-timeout", "NodeQ", "2", "connection timeout demo"],
+        ["JOB", "template-parse-error", "FifoQ", "1", "invalid input demo"],
+        ["JOB", "bulk-device-unreachable", "NodeQ", "1", "unreachable host demo"],
+      ];
+
+      const demoLogRows = [
+        ["23:27:41", "finished", "linux-net-demo-001", "run_command", "queue NodeQ · worker demo-node-1 · 184 ms"],
+        ["23:26:58", "queued", "linux-net-demo-002", "bulk_execute", "queue FifoQ · waiting for worker"],
+        ["23:25:34", "failed", "linux-net-demo-003", "render_template", "queue FifoQ · validation demo"],
+        ["23:23:12", "finished", "linux-net-demo-004", "get_system_stats", "queue default · 46 ms"],
+      ];
+
+      function statCards(cards) {
+        return `<div class="summary-grid">${cards.map(([label, value]) => `
+          <article class="stat-card">
+            <div class="stat-label">${escapeHtml(label)}</div>
+            <div class="stat-value">${escapeHtml(value)}</div>
+          </article>
+        `).join("")}</div>`;
+      }
+
+      function detailTable(headers, rows) {
+        return `
+          <section class="list-panel">
+            <div class="table-wrap">
+              <table class="detail-list">
+                <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
+                <tbody>${rows.length ? rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("") : emptyState("No live records for this view yet.")}</tbody>
+              </table>
+            </div>
+          </section>
+        `;
+      }
+
+      function applyGlobalFilter() {
+        const query = filterQuery;
+        if (currentView === "Performance") {
+          renderRows(currentRows);
+          return;
+        }
+
+        const tables = [...sectionView.querySelectorAll("table")];
+        let total = 0;
+        let visible = 0;
+        tables.forEach((table) => {
+          [...table.tBodies].forEach((tbody) => {
+            [...tbody.rows].forEach((row) => {
+              if (row.querySelector(".empty-state")) {
+                row.hidden = false;
+                return;
+              }
+              total += 1;
+              const match = !query || row.innerText.toLowerCase().includes(query);
+              row.hidden = !match;
+              if (match) {
+                visible += 1;
+              }
+            });
+          });
+        });
+        $("#filter-count").textContent = query
+          ? `Showing ${visible} of ${total} rows`
+          : total ? `Showing all ${total} rows` : "No rows";
+      }
+
+      function updateFilterCount() {
+        const query = filterQuery;
+        const rows = currentView === "Performance"
+          ? [...document.querySelectorAll("#endpoint-body tr")]
+          : [...sectionView.querySelectorAll("tbody tr")].filter((row) => !row.querySelector(".empty-state"));
+        const visible = rows.filter((row) => !row.hidden).length;
+        $("#filter-count").textContent = query
+          ? `Showing ${visible} of ${rows.length} rows`
+          : rows.length ? `Showing all ${rows.length} rows` : "No rows";
+      }
+
+      function kpiStrip(cards) {
+        return `
+          <section class="panel">
+            <div class="kpi-strip">
+              ${cards.map(([label, value]) => `
+                <div class="kpi">
+                  <div class="kpi-label">${escapeHtml(label)}</div>
+                  <div class="kpi-value">${escapeHtml(value)}</div>
+                </div>
+              `).join("")}
+            </div>
+          </section>
+        `;
+      }
+
+      function barsPanel(title, values, mode = "traffic") {
+        const max = Math.max(...values.map((item) => item.total || item), 1);
+        const labels = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00", "03:00", "04:00"];
+        return `
+          <section class="panel">
+            <div class="bar-panel">
+              <div class="bar-title">${escapeHtml(title)}</div>
+              <div class="bar-chart">
+                ${values.map((value) => {
+                  const total = value.total || value;
+                  const error = value.error || 0;
+                  const main = Math.max(5, Math.round(((total - error) / max) * 170));
+                  const err = Math.max(error ? 3 : 0, Math.round((error / max) * 170));
+                  return `
+                    <div class="bar">
+                      ${mode === "traffic" ? `<div class="bar-error" style="height:${err}px"></div>` : ""}
+                      <div class="${mode === "errors" ? "bar-client" : "bar-main"}" style="height:${main}px"></div>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+              <div class="bar-labels">${labels.map((label) => `<span>${label}</span>`).join("")}</div>
+            </div>
+          </section>
+        `;
+      }
+
+      function trafficView(stats, rows) {
+        if (!currentLive) {
+          return kpiStrip([
+            ["Total requests", "Demo"],
+            ["Requests per minute", "Demo"],
+            ["Error rate", "Demo"],
+            ["Data transferred", "Demo"],
+          ]) + detailTable(["Endpoint", "Requests", "Error rate", "Source"], rows.map(([method, path, , slow]) => [
+            endpointCell(method, path),
+            escapeHtml(String(slow).split("/").at(-1)?.trim() || "0"),
+            "demo",
+            "sample",
+          ]));
+        }
+
+        const jobs = stats.jobs || {};
+        const total = num(jobs.total);
+        const failed = num(jobs.failed);
+        const active = num(jobs.active) + num(jobs.in_progress);
+        const queued = num(jobs.queued);
+        const hasLiveTraffic = total || active || queued || failed;
+        const trafficBars = hasLiveTraffic ? Array.from({ length: 25 }, (_, index) => {
+          if (index === 22) return { total: queued, error: 0 };
+          if (index === 23) return { total: active, error: 0 };
+          if (index === 24) return { total, error: failed };
+          return { total: 0, error: 0 };
+        }) : [
+          { total: 44, error: 0 }, { total: 52, error: 0 }, { total: 61, error: 1 },
+          { total: 58, error: 0 }, { total: 63, error: 1 }, { total: 69, error: 0 },
+          { total: 72, error: 1 }, { total: 80, error: 2 }, { total: 76, error: 1 },
+          { total: 68, error: 0 }, { total: 59, error: 1 }, { total: 54, error: 0 },
+          { total: 51, error: 0 }, { total: 48, error: 0 }, { total: 46, error: 1 },
+          { total: 42, error: 0 }, { total: 39, error: 0 }, { total: 37, error: 0 },
+          { total: 36, error: 0 }, { total: 34, error: 0 }, { total: 33, error: 0 },
+          { total: 31, error: 0 }, { total: 35, error: 1 }, { total: 41, error: 0 },
+          { total: 45, error: 0 },
+        ];
+        const endpointRows = (hasLiveTraffic ? rows.map(([method, path, , slow]) => {
+          const parts = String(slow).split("/");
+          const numerator = Number(parts[0]?.trim() || 0);
+          const denominator = Number(parts[1]?.trim() || 0);
+          return [
+            endpointCell(method, path),
+            `<div class="score-cell" style="--fill:${Math.min(100, denominator * 10)}%">${denominator.toLocaleString()}</div>`,
+            percent(numerator, denominator),
+            "derived from jobs/workers",
+          ];
+        }) : demoTrafficRows.map(([method, path, requests, rate, source]) => [
+          endpointCell(method, path),
+          `<div class="score-cell" style="--fill:${Math.min(100, Number(requests) / 4.2)}%">${escapeHtml(requests)}</div>`,
+          escapeHtml(rate),
+          `demo · ${escapeHtml(source)}`,
+        ]));
+        const demoTotal = demoTrafficRows.reduce((sum, row) => sum + Number(row[2]), 0);
+
+        return kpiStrip([
+          ["Total jobs", total.toLocaleString()],
+          [hasLiveTraffic ? "Active jobs" : "Demo requests", hasLiveTraffic ? String(active) : demoTotal.toLocaleString()],
+          ["Queued jobs", String(queued)],
+          ["Failure rate", percent(failed, total)],
+        ]) + barsPanel(hasLiveTraffic ? "Job activity from live controller state" : "Demo request activity sample", trafficBars, "traffic") + detailTable(
+          ["Endpoint", "Operations", "Pressure", "Source"],
+          endpointRows,
+        );
+      }
+
+      function errorsView(stats, jobs) {
+        const totals = stats.jobs || {};
+        const failed = num(totals.failed);
+        const total = num(totals.total);
+        const queued = num(totals.queued);
+        const hasLiveFailures = failed > 0 || jobs.some((job) => job.status === "failed");
+        const errorBars = hasLiveFailures ? Array.from({ length: 25 }, (_, index) => index === 24 ? failed : 0)
+          : [0, 0, 1, 0, 0, 0, 1, 0, 2, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0];
+        const failedRows = hasLiveFailures ? jobs.filter((job) => job.status === "failed").map((job) => [
+          `<div class="endpoint-cell"><span class="expand">›</span><span class="status-code">JOB</span><span>${escapeHtml(job.id || "unknown job")}</span></div>`,
+          escapeHtml(job.queue || "default"),
+          `<div class="score-cell" style="--fill:100%">1</div>`,
+          escapeHtml(job.exc_info || job.ended_at || "failed"),
+        ]) : demoErrorRows.map(([code, label, queue, count, detail]) => [
+          `<div class="endpoint-cell"><span class="expand">›</span><span class="status-code">${escapeHtml(code)}</span><span>${escapeHtml(label)}</span></div>`,
+          escapeHtml(queue),
+          `<div class="score-cell" style="--fill:${Math.min(100, Number(count) * 34)}%">${escapeHtml(count)}</div>`,
+          `demo · ${escapeHtml(detail)}`,
+        ]);
+
+        return kpiStrip([
+          ["Failed jobs", String(failed)],
+          [hasLiveFailures ? "Queued jobs" : "Demo failures", hasLiveFailures ? String(queued) : String(demoErrorRows.length)],
+          ["Total jobs", String(total)],
+          ["Failure rate", percent(failed, total)],
+        ]) + barsPanel(hasLiveFailures ? "Failed jobs from live queue state" : "Demo failed-job sample", errorBars, "errors") + detailTable(
+          ["Failure", "Queue", "Occurrences", "Detail"],
+          failedRows,
+        );
+      }
+
+      function requestLogsView(jobs, stats) {
+        const hasLiveLogs = jobs.length > 0;
+        const logBars = hasLiveLogs ? Array.from({ length: 48 }, (_, index) => index === 47 ? jobs.length : 0)
+          : [10, 13, 11, 15, 18, 16, 19, 22, 20, 18, 17, 16, 14, 15, 16, 18, 17, 16, 15, 14, 12, 13, 12, 11, 10, 9, 10, 12, 13, 11, 10, 9, 8, 9, 10, 12, 11, 10, 8, 9, 8, 7, 8, 9, 12, 13, 14, 12];
+        const max = Math.max(...logBars, 1);
+        const rows = hasLiveLogs ? jobs.slice(0, 20).map((job) => [
+          `<div>${escapeHtml(job.enqueued_at || job.created_at || "unknown")}</div><div class="muted">${escapeHtml(job.id || "job")}</div>`,
+          `<span class="status-code ${job.status === "finished" ? "ok" : ""}">${escapeHtml(job.status || "queued")}</span>`,
+          `<div class="log-request"><div>${escapeHtml(job.func_name || job.origin || "queued job")}</div><div class="log-meta">queue ${escapeHtml(job.queue || "default")} · worker ${escapeHtml(job.worker_name || "unassigned")}</div></div>`,
+        ]) : demoLogRows.map(([time, status, id, action, meta]) => [
+          `<div>${escapeHtml(time)}</div><div class="muted">${escapeHtml(id)}</div>`,
+          `<span class="status-code ${status === "finished" ? "ok" : ""}">${escapeHtml(status)}</span>`,
+          `<div class="log-request"><div>${escapeHtml(action)}</div><div class="log-meta">demo · ${escapeHtml(meta)}</div></div>`,
+        ]);
+        return `
+          <section class="panel">
+            <div class="mini-bars">
+              ${logBars.map((value) => `<div class="mini-bar" style="height:${Math.max(8, Math.round((value / max) * 72))}px"></div>`).join("")}
+            </div>
+            <div class="bar-labels">${["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00", "03:00", "04:00"].map((label) => `<span>${label}</span>`).join("")}</div>
+          </section>
+        ` + detailTable(
+          ["Time", "Status", hasLiveLogs ? `Jobs (${num(stats.jobs?.total)})` : "Demo jobs"],
+          rows,
+        );
+      }
+
+      function renderSectionView(view) {
+        if (view === "Performance") {
+          performanceView.hidden = false;
+          sectionView.hidden = true;
+          updateMetrics(currentStats, currentRows, currentLive);
+          renderRows(currentRows);
+          return;
+        }
+
+        performanceView.hidden = true;
+        sectionView.hidden = false;
+        const stats = currentStats || {};
+        const workers = currentWorkers || [];
+        const jobs = currentJobs || [];
+        const totalJobs = num(stats.jobs?.total || jobs.length);
+        const failedJobs = num(stats.jobs?.failed || jobs.filter((job) => job.status === "failed").length);
+        const queuedJobs = num(stats.jobs?.queued || jobs.filter((job) => job.status === "queued").length);
+        const activeJobs = num(stats.jobs?.active) + num(stats.jobs?.in_progress);
+        const workerTotal = num(stats.workers?.total || workers.length);
+        const queues = queueRows(stats);
+        const workerSource = currentLive ? workers : [
+          { name: "node-worker", status: "running", queues: ["NodeQ"] },
+          { name: "fifo-worker", status: "running", queues: ["FifoQ"] },
+        ];
+        const workerRows = workerSource.map((worker, index) => [
+          escapeHtml(worker.name || "worker"),
+          state(workerStatus(worker, stats, index)),
+          escapeHtml((worker.queues || []).join(", ") || "none reported"),
+          escapeHtml(worker.last_heartbeat || worker.hostname || "-"),
+        ]);
+        const jobRows = (jobs.length ? jobs.slice(0, 8).map((job) => [
+          escapeHtml(job.id || "job"),
+          state(job.status || "queued"),
+          escapeHtml(job.queue || "default"),
+          escapeHtml(job.worker_name || job.enqueued_at || "-"),
+        ]) : demoLogRows.map(([time, status, id, action, meta]) => [
+          `${escapeHtml(id)}<div class="muted">${escapeHtml(action)}</div>`,
+          state(`demo ${status}`),
+          escapeHtml(meta.match(/queue ([^·]+)/)?.[1]?.trim() || "default"),
+          escapeHtml(time),
+        ]));
+        const queueDetailRows = queues.map((queue) => [
+          escapeHtml(queue.name || "default"),
+          state(num(queue.queued_jobs) ? "active" : "idle"),
+          String(num(queue.workers)),
+          String(num(queue.queued_jobs)),
+          String(num(queue.failed_jobs)),
+          `${num(queue.backpressure_ratio).toFixed(3)}`,
+        ]);
+        const observabilityRows = Object.entries(stats.observability || {}).map(([name, enabled]) => [
+          escapeHtml(name.replaceAll("_", " ")),
+          state(enabled ? "enabled" : "disabled"),
+          enabled ? "true" : "false",
+        ]);
+
+        const views = {
+          Apps: () => statCards([
+            ["Controller", stats.status || "online"],
+            ["Workers", String(workerTotal)],
+            ["Queues", String(queues.length)],
+            ["Uptime", uptimeText(stats.uptime_seconds)],
+          ]) + detailTable(["Service", "Status", "Live value"], [
+            ["Linux-Net Controller", state(stats.status || "online"), `uptime ${uptimeText(stats.uptime_seconds)}`],
+            ["Redis queues", state(queuedJobs || activeJobs ? "active" : "idle"), `${queues.length} queue(s)`],
+            ["Scheduler", state(stats.scheduling?.strategy || "unknown"), escapeHtml(stats.scheduling?.strategy || "-")],
+          ]),
+          Traffic: () => trafficView(stats, currentRows),
+          Errors: () => errorsView(stats, jobs),
+          Workers: () => statCards([
+            ["Total", String(workerTotal)],
+            ["Busy", String(num(stats.workers?.busy))],
+            ["Idle", String(num(stats.workers?.idle))],
+            ["Registered", String(workerSource.length)],
+          ]) + detailTable(["Worker", "Status", "Queues", "Last heartbeat"], workerRows),
+          "Request logs": () => requestLogsView(jobs, stats),
+          Resources: () => statCards([
+            ["Active nodes", String(num(stats.nodes?.active))],
+            ["Total capacity", String(num(stats.nodes?.total_capacity))],
+            ["Queues", String(queues.length)],
+            ["Backpressure", queues.length ? `${Math.max(...queues.map((queue) => num(queue.backpressure_ratio))).toFixed(3)}` : "0.000"],
+          ]) + detailTable(["Queue", "State", "Workers", "Queued", "Failed", "Backpressure"], queueDetailRows)
+            + detailTable(["Feature", "State", "Value"], featureRows(stats)),
+          Uptime: () => statCards([
+            ["Status", stats.status || "online"],
+            ["Uptime", uptimeText(stats.uptime_seconds)],
+            ["Health", currentLive ? "OK" : "Demo"],
+            ["Queued", String(queuedJobs)],
+          ]) + detailTable(["Check", "State", "Value"], [
+            ["Health endpoint", state(currentLive ? "ok" : "demo"), "/health"],
+            ["Controller process", state(stats.status || "online"), uptimeText(stats.uptime_seconds)],
+            ["Workers", state(workerTotal ? "registered" : "none"), String(workerTotal)],
+            ["Observability", state(stats.observability?.request_id_propagation ? "enabled" : "unknown"), "request id propagation"],
+          ]),
+          Alerts: () => statCards([
+            ["Open", String((failedJobs ? 1 : 0) + (queues.some((queue) => num(queue.backpressure_ratio) > 1) ? 1 : 0))],
+            ["Failed jobs", String(failedJobs)],
+            ["Queued", String(queuedJobs)],
+            ["Self healing", String(num(stats.self_healing?.total_triggers))],
+          ]) + detailTable(["Alert", "Severity", "State"], [
+            ["Failed jobs", failedJobs ? "High" : "Info", state(failedJobs ? "open" : "clear")],
+            ["Queue pressure", queuedJobs ? "Medium" : "Info", state(queuedJobs ? "watching" : "clear")],
+            ["Worker registration", workerTotal ? "Info" : "Medium", state(workerTotal ? "registered" : "no workers")],
+          ]),
+          "What's new": () => statCards([
+            ["Dashboard", "Ready"],
+            ["Live stats", currentLive ? "On" : "Demo"],
+            ["Views", "12"],
+            ["Build", "0.4.3"],
+          ]) + detailTable(["Capability", "State", "Value"], observabilityRows),
+          "Get in touch": () => statCards([
+            ["Project", "Linux-Net"],
+            ["Docs", "Local"],
+            ["API", "FastAPI"],
+            ["Status", stats.status || "online"],
+          ]) + detailTable(["Channel", "Destination", "State"], [
+            ["API docs", "/docs", state("available")],
+            ["OpenAPI", "/openapi.json", state("available")],
+            ["Health", "/health", state(currentLive ? "ok" : "demo")],
+          ]),
+          Settings: () => statCards([
+            ["Filter", "Ready"],
+            ["Range", $("#range").value],
+            ["Environment", $("#env").value],
+            ["Mode", currentLive ? "Live" : "Demo"],
+          ]) + detailTable(["Setting", "Value", "State"], [
+            ["Time range", escapeHtml($("#range").value), state("active")],
+            ["Environment", escapeHtml($("#env").value), state("active")],
+            ["Filter", "focuses endpoint search", state("ready")],
+            ["API key", apiKey ? "loaded from URL/local storage" : "not configured", state(apiKey ? "ready" : "demo")],
+          ]) + detailTable(["Recent job", "Status", "Queue", "Worker/time"], jobRows),
+        };
+
+        sectionView.innerHTML = views[view] ? views[view]() : "";
+        applyGlobalFilter();
+        statusLine.textContent = currentLive
+          ? `Controller ${stats.status || "online"} · ${workerTotal} workers · ${queuedJobs} queued jobs`
+          : "Demo data shown";
+      }
+
+      function setView(view, updateHash = true) {
+        currentView = view;
+        pageTitle.textContent = view;
+        viewLinks().forEach((item) => {
+          const active = item.dataset.view === view;
+          item.classList.toggle("active", active);
+          if (active) {
+            item.setAttribute("aria-current", "page");
+          } else {
+            item.removeAttribute("aria-current");
+          }
+        });
+        renderSectionView(view);
+        updateFilterCount();
+        if (updateHash) {
+          const target = [...viewLinks()].find((item) => item.dataset.view === view);
+          if (target) {
+            history.replaceState(null, "", target.getAttribute("href"));
+          }
+        }
+      }
+
+      function rowsFromLiveData(stats, workers, jobs) {
+        const totalJobs = stats?.jobs?.total || jobs.length || 1;
+        const failed = stats?.jobs?.failed || jobs.filter((job) => job.status === "failed").length;
+        const queued = stats?.jobs?.queued || jobs.filter((job) => job.status === "queued").length;
+        const busy = stats?.workers?.busy || workers.filter((worker) => worker.status === "busy").length;
+        const workerTotal = stats?.workers?.total || workers.length || 1;
+        const pressure = Math.min(1, (queued + busy) / Math.max(1, totalJobs + workerTotal));
+        const baseP95 = 160 + pressure * 260;
+        const successRatio = Math.max(0.62, 1 - failed / Math.max(1, totalJobs));
+
+        return [
+          ["GET", "/health", Math.min(0.999, successRatio + 0.04), `0 / ${Math.max(24, totalJobs)}`, 18, 30, 45],
+          ["GET", "/system/stats", successRatio, `${queued} / ${Math.max(1, totalJobs)}`, 45, 70, baseP95 * 0.55],
+          ["GET", "/workers", Math.max(0.72, successRatio - pressure * 0.12), `${busy} / ${workerTotal}`, 60, 96, baseP95 * 0.7],
+          ["GET", "/jobs", Math.max(0.70, successRatio - pressure * 0.18), `${queued} / ${Math.max(1, totalJobs)}`, 85, 130, baseP95],
+          ["POST", "/device/exec", Math.max(0.66, successRatio - pressure * 0.24), `${Math.ceil(pressure * 29)} / ${Math.max(1, totalJobs)}`, 150, 220, baseP95 * 1.08],
+          ["POST", "/device/bulk", Math.max(0.64, successRatio - pressure * 0.28), `${Math.ceil(pressure * 41)} / ${Math.max(1, totalJobs)}`, 190, 255, baseP95 * 1.2],
+          ["POST", "/template/render/jinja2", Math.max(0.78, successRatio - 0.08), `${Math.ceil(pressure * 9)} / ${Math.max(1, totalJobs)}`, 70, 108, baseP95 * 0.62],
+          ["GET", "/observability/dashboard", Math.max(0.80, successRatio - 0.06), `${queued} / ${Math.max(1, totalJobs)}`, 55, 84, baseP95 * 0.58],
+          ["DELETE", "/jobs/{job_id}", Math.max(0.82, successRatio - 0.05), `${failed} / ${Math.max(1, totalJobs)}`, 64, 96, baseP95 * 0.72],
+        ];
+      }
+
+      function updateMetrics(stats, rows, live) {
+        const averageScore = rows.reduce((sum, row) => sum + row[2], 0) / rows.length;
+        const p95 = rows.reduce((max, row) => Math.max(max, row[6]), 0);
+        $("#apdex-value").textContent = averageScore.toFixed(3);
+        $("#latency-value").textContent = fmtMs(p95);
+        if (live) {
+          const liveApdex = Array.from({ length: 24 }, (_, index) => clamp(averageScore - (index % 5 === 0 ? 0.012 : 0), 0.5, 1));
+          const liveLatency = [
+            Array.from({ length: 24 }, () => p95 * 1.18),
+            Array.from({ length: 24 }, () => p95),
+            Array.from({ length: 24 }, () => p95 * 0.82),
+          ];
+          drawApdex(liveApdex);
+          drawLatency(liveLatency);
+        } else {
+          drawApdex(apdexSeries);
+          drawLatency(latencyBands);
+        }
+        modePill.textContent = live ? "Live" : "Demo";
+        statusLine.textContent = live
+          ? `Controller ${stats?.status || "online"} · ${stats?.workers?.total || 0} workers · ${stats?.jobs?.queued || 0} queued jobs`
+          : "Demo data shown";
+      }
+
+      async function fetchJson(path, key) {
+        const response = await fetch(path, { headers: { "X-API-KEY": key } });
+        if (!response.ok) {
+          throw new Error(`${path} returned ${response.status}`);
+        }
+        return response.json();
+      }
+
+      async function refresh() {
+        const key = apiKey.trim();
+        if (key) {
+          localStorage.setItem("linuxNetApiKey", key);
+        }
+
+        try {
+          if (!key) {
+            throw new Error("missing key");
+          }
+          const [dashboard, stats, workers, jobs] = await Promise.all([
+            fetchJson("/observability/dashboard", key),
+            fetchJson("/system/stats", key),
+            fetchJson("/workers", key),
+            fetchJson("/jobs", key),
+          ]);
+          const rows = rowsFromLiveData(stats || dashboard, workers || [], jobs || []);
+          currentRows = rows;
+          currentStats = stats || dashboard;
+          currentWorkers = workers || [];
+          currentJobs = jobs || [];
+          currentLive = true;
+          renderSectionView(currentView);
+        } catch (error) {
+          currentRows = demoRows;
+          currentStats = { status: "demo", workers: { total: 4 }, jobs: { queued: 0 } };
+          currentWorkers = [];
+          currentJobs = [];
+          currentLive = false;
+          renderSectionView(currentView);
+        }
+      }
+
+      $("#refresh").addEventListener("click", refresh);
+      $("#search").addEventListener("input", (event) => {
+        filterQuery = event.target.value.trim().toLowerCase();
+        $("#global-filter").value = event.target.value;
+        renderRows(currentRows);
+      });
+      $("#filter").addEventListener("click", () => {
+        const panel = $("#filter-panel");
+        const nextOpen = panel.hidden;
+        panel.hidden = !nextOpen;
+        $("#filter").setAttribute("aria-expanded", String(nextOpen));
+        if (nextOpen) {
+          $("#global-filter").focus();
+          updateFilterCount();
+        }
+      });
+      $("#global-filter").addEventListener("input", (event) => {
+        filterQuery = event.target.value.trim().toLowerCase();
+        $("#search").value = event.target.value;
+        applyGlobalFilter();
+      });
+      $("#filter-reset").addEventListener("click", () => {
+        filterQuery = "";
+        $("#global-filter").value = "";
+        $("#search").value = "";
+        applyGlobalFilter();
+        $("#global-filter").focus();
+      });
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest(".filter-wrap")) {
+          $("#filter-panel").hidden = true;
+          $("#filter").setAttribute("aria-expanded", "false");
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          $("#filter-panel").hidden = true;
+          $("#filter").setAttribute("aria-expanded", "false");
+          $("#filter").focus();
+        }
+      });
+      viewLinks().forEach((item) => {
+        item.addEventListener("click", (event) => {
+          event.preventDefault();
+          setView(item.dataset.view);
+        });
+      });
+
+      drawApdex(apdexSeries);
+      drawLatency(latencyBands);
+      const hashTarget = [...viewLinks()].find((item) => item.getAttribute("href") === window.location.hash);
+      if (hashTarget) {
+        setView(hashTarget.dataset.view, false);
+      }
+      refresh();
+    </script>
+  </body>
+</html>

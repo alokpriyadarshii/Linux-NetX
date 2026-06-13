@@ -1,7 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 
 from . import __version__
@@ -50,6 +52,13 @@ app.middleware("http")(request_context_middleware)
 
 # Static files
 # app.mount("/static", StaticFiles(directory="linux_net/static"), name="static")
+
+
+@app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+def dashboard():
+    dashboard_path = Path(__file__).with_name("static") / "dashboard.html"
+    return dashboard_path.read_text(encoding="utf-8")
+
 
 # Routes
 app.include_router(device, dependencies=[Depends(verify_api_key)])  # Unified device operation
